@@ -27,6 +27,20 @@ func newDownloadCmd() *cobra.Command {
 		Use:   "download",
 		Short: "Download genome assemblies",
 		Long:  "Download genome assembly files from ATB. URLs can be supplied via --url, --urls, --from, or stdin.",
+		Example: `  # Download genomes from a query result file
+  atb download --from results.tsv --output-dir ./genomes
+
+  # Pipe query results directly to download
+  atb query --species "Escherichia coli" --hq-only --limit 5 --format csv | atb download --from - -o ./ecoli
+
+  # Preview what would be downloaded
+  atb download --from results.tsv --dry-run
+
+  # Download a single genome
+  atb download --url https://allthebacteria-assemblies.s3.eu-west-2.amazonaws.com/SAMD00000355.fa.gz -o ./genomes
+
+  # Download with higher parallelism
+  atb download --from results.tsv -o ./genomes --parallel 8`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {

@@ -25,6 +25,17 @@ func newSummariseCmd() *cobra.Command {
 
 By default prints total counts, HQ fraction, top species, and dataset breakdown.
 Use --by to group results by a specific column (e.g. --by sylph_species).`,
+		Example: `  # Default summary of the full database
+  atb summarise
+
+  # Group by species (top 20)
+  atb summarise --by sylph_species --top 20
+
+  # Summarise a previous query result
+  atb summarise --from salmonella.tsv
+
+  # Pipe query to summarise
+  atb query --genus Salmonella --hq-only --limit 100 --format csv | atb summarise --from -`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var rows []query.ResultRow
 

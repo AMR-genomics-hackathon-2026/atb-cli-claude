@@ -49,6 +49,26 @@ func newQueryCmd() *cobra.Command {
 		Use:   "query",
 		Short: "Query the ATB database",
 		Long:  "Query bacterial genome metadata from local parquet tables.",
+		Example: `  # Get 10 high-quality E. coli genomes
+  atb query --species "Escherichia coli" --hq-only --limit 10
+
+  # Filter by quality and sort by N50
+  atb query --species "Escherichia coli" --min-completeness 99 --min-n50 200000 --sort-by N50 --sort-desc --limit 20
+
+  # Search by genus with specific columns
+  atb query --genus Salmonella --hq-only --columns sample_accession,sylph_species,N50 --limit 20
+
+  # Wildcard species search
+  atb query --species-like "Streptococcus%" --hq-only --limit 10
+
+  # Filter by country (requires ENA data)
+  atb query --species "Salmonella enterica" --country "United Kingdom" --limit 20
+
+  # Use a TOML filter file for reproducible queries
+  atb query --filter my_query.toml
+
+  # Output as CSV to a file
+  atb query --species "Escherichia coli" --hq-only --format csv -o results.csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {

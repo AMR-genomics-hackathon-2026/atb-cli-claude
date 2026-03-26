@@ -14,7 +14,12 @@ func newInfoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "info <sample_accession>",
 		Short: "Show detailed information for a sample",
-		Args:  cobra.ExactArgs(1),
+		Example: `  # Show all available info for a sample
+  atb info SAMD00000355
+
+  # Look up by run accession
+  atb info SRR11427802`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			accession := args[0]
 

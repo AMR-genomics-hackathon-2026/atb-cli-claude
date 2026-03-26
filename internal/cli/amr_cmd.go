@@ -38,6 +38,20 @@ func newAMRCmd() *cobra.Command {
 
 Data is organized by genus and element type (amr, stress, virulence).
 Use 'atb fetch --amr --genus <Genus>' to download data before querying.`,
+		Example: `  # Get AMR gene hits for E. coli (HQ only)
+  atb amr --species "Escherichia coli" --hq-only --limit 100
+
+  # Filter by drug class
+  atb amr --species "Escherichia coli" --class "BETA-LACTAM"
+
+  # Search for beta-lactamase genes
+  atb amr --species "Escherichia coli" --gene "bla%"
+
+  # Query stress response genes
+  atb amr --species "Escherichia coli" --type stress
+
+  # Query all element types (AMR + stress + virulence)
+  atb amr --species "Klebsiella pneumoniae" --type all --hq-only`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {

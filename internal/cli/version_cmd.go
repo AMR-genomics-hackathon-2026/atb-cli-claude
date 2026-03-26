@@ -10,8 +10,9 @@ import (
 
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
-		Short: "Print version and environment information",
+		Use:     "version",
+		Short:   "Print version and environment information",
+		Example: `  atb version`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			root := cmd.Root()
 

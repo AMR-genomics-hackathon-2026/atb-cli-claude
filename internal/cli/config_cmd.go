@@ -41,8 +41,9 @@ func loadConfig() (config.Config, error) {
 
 func newConfigInitCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "init",
-		Short: "Create a default config file",
+		Use:     "init",
+		Short:   "Create a default config file",
+		Example: `  atb config init`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := resolveConfigPath()
 
@@ -63,8 +64,9 @@ func newConfigInitCmd() *cobra.Command {
 
 func newConfigShowCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show",
-		Short: "Print current configuration as TOML",
+		Use:     "show",
+		Short:   "Print current configuration as TOML",
+		Example: `  atb config show`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
@@ -84,9 +86,10 @@ func newConfigShowCmd() *cobra.Command {
 
 func newConfigSetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <key> <value>",
-		Short: "Set a config value (key in dotted form, e.g. general.data_dir)",
-		Args:  cobra.ExactArgs(2),
+		Use:     "set <key> <value>",
+		Short:   "Set a config value (key in dotted form, e.g. general.data_dir)",
+		Example: `  atb config set general.data_dir /path/to/data`,
+		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key, value := args[0], args[1]
 
@@ -112,9 +115,10 @@ func newConfigSetCmd() *cobra.Command {
 
 func newConfigGetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "get <key>",
-		Short: "Get a config value (key in dotted form, e.g. general.data_dir)",
-		Args:  cobra.ExactArgs(1),
+		Use:     "get <key>",
+		Short:   "Get a config value (key in dotted form, e.g. general.data_dir)",
+		Example: `  atb config get general.data_dir`,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {

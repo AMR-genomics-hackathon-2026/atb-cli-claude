@@ -16,6 +16,11 @@ func newUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Update atb to the latest version",
+		Example: `  # Check for updates and install interactively
+  atb update
+
+  # Update without confirmation (for scripts)
+  atb update --force`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			currentVersion := cmd.Root().Version
 			w := cmd.ErrOrStderr()
