@@ -234,14 +234,45 @@ atb query --species "E. coli" --limit 5 --format table   # pretty table
 
 ## Performance
 
-Querying 3.2M rows on a typical machine:
+Benchmarked on Linux x86_64, 8 cores, 15 GB RAM. Database: 3,227,665 genomes.
 
-| Operation | Time |
-|-----------|------|
-| Species filter (assembly only) | ~7s |
-| Species + QC + N50 (3-table join) | ~14s |
-| Sample info (all tables) | ~40s |
-| Genus filter | ~8s |
+Run `bash benchmark.sh` to reproduce these results on your machine.
+
+### Query (single table - assembly.parquet only)
+
+| Limit | Wall time | Peak RAM | CPU |
+|-------|-----------|----------|-----|
+| 10 | 7.1s | 2.1 GB | 117% |
+| 20 | 7.1s | 2.1 GB | 116% |
+| 30 | 7.1s | 2.1 GB | 116% |
+| 40 | 7.1s | 2.1 GB | 116% |
+| 50 | 7.1s | 2.1 GB | 116% |
+
+Query time is constant regardless of `--limit` because the full parquet file is scanned and filtered, then the limit is applied. RAM usage is ~2.1 GB (the assembly.parquet file decompressed in memory).
+
+### Query with joins (assembly + checkm2 + assembly_stats)
+
+| Limit | Wall time | Peak RAM | CPU |
+|-------|-----------|----------|-----|
+| 10 | 15.9s | 2.2 GB | 126% |
+| 20 | 15.9s | 2.2 GB | 125% |
+| 30 | 16.0s | 2.2 GB | 126% |
+| 40 | 15.9s | 2.1 GB | 127% |
+| 50 | 15.8s | 2.2 GB | 125% |
+
+Adding QC and assembly stats joins roughly doubles query time. RAM stays near 2.2 GB.
+
+### Download (genome FASTA from AWS S3, parallel=4)
+
+| Files | Wall time | Peak RAM | Total size | Throughput |
+|-------|-----------|----------|------------|------------|
+| 10 | 2.2s | 18 MB | 16 MB | 7 MB/s |
+| 20 | 2.5s | 18 MB | 31 MB | 13 MB/s |
+| 30 | 3.1s | 18 MB | 46 MB | 15 MB/s |
+| 40 | 3.2s | 18 MB | 62 MB | 20 MB/s |
+| 50 | 3.8s | 18 MB | 77 MB | 21 MB/s |
+
+Downloads are memory-efficient (18 MB flat) and throughput scales with parallelism. Average genome assembly is ~1.5 MB compressed.
 
 ## Building
 
