@@ -11,12 +11,14 @@ import (
 )
 
 func newMCPCmd() *cobra.Command {
+	var httpAddr string
+
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Start MCP server for LLM integration",
-		Long: `Start a Model Context Protocol (MCP) server over stdio.
+		Long: `Start a Model Context Protocol (MCP) server over stdio or HTTP/SSE.
 
-This allows LLMs like Claude to query the AllTheBacteria database
+This allows LLMs like Claude and ChatGPT to query the AllTheBacteria database
 through structured tool calls.
 
 The server exposes 5 tools:
@@ -37,9 +39,17 @@ Usage with Claude Desktop (add to claude_desktop_config.json):
         "args": ["mcp", "--data-dir", "/path/to/data"]
       }
     }
-  }`,
-		Example: `  # Start MCP server (requires built index)
+  }
+
+Usage with ChatGPT / OpenAI API (HTTP/SSE mode):
+  Start the server with --http, then configure ChatGPT with the SSE URL.`,
+		Example: `  # Start stdio server (for Claude Code, Cursor, Codex CLI)
   atb mcp --data-dir ~/atb/metadata/parquet
+
+  # Start HTTP/SSE server (for ChatGPT, OpenAI API, remote clients)
+  atb mcp --data-dir ~/atb/metadata/parquet --http :8080
+
+  # ChatGPT: configure with URL http://your-host:8080/sse
 
   # Add to Claude Code
   claude mcp add atb -- atb mcp --data-dir ~/atb/metadata/parquet`,
@@ -58,11 +68,21 @@ Usage with Claude Desktop (add to claude_desktop_config.json):
 				dir = filepath.Join(home, ".atb", "data")
 			}
 
-			if err := mcpserver.Serve(cmd.Context(), dir); err != nil {
+			if httpAddr != "" {
+				if err := mcpserver.ServeHTTP(cmd.Context(), dir, httpAddr); err != nil {
+					return fmt.Errorf("MCP HTTP server error: %w", err)
+				}
+				return nil
+			}
+
+			if err := mcpserver.ServeStdio(cmd.Context(), dir); err != nil {
 				return fmt.Errorf("MCP server error: %w", err)
 			}
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&httpAddr, "http", "", "Start HTTP/SSE server on this address (e.g., :8080)")
+
 	return cmd
 }

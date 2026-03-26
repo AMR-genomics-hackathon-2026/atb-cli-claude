@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,8 +14,8 @@ import (
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 )
 
-// Serve starts an MCP server over stdio, exposing 5 tools for querying ATB.
-func Serve(ctx context.Context, dataDir string) error {
+// NewServer creates and configures an MCP server with all 5 ATB tools.
+func NewServer(dataDir string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    "atb",
 		Version: "1.0",
@@ -44,7 +46,53 @@ func Serve(ctx context.Context, dataDir string) error {
 		Description: "List available species in the database sorted by sample count",
 	}, makeSpeciesListHandler(dataDir))
 
-	return s.Run(ctx, &mcp.StdioTransport{})
+	return s
+}
+
+// ServeStdio starts the MCP server using stdio transport (for Claude Code, Cursor, Codex CLI).
+func ServeStdio(ctx context.Context, dataDir string) error {
+	return NewServer(dataDir).Run(ctx, &mcp.StdioTransport{})
+}
+
+// ServeHTTP starts the MCP server using HTTP/SSE transport (for ChatGPT, OpenAI API, remote clients).
+func ServeHTTP(ctx context.Context, dataDir string, addr string) error {
+	handler := mcp.NewSSEHandler(func(req *http.Request) *mcp.Server {
+		return NewServer(dataDir)
+	}, nil)
+
+	mux := http.NewServeMux()
+	mux.Handle("/", corsMiddleware(handler))
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
+	fmt.Fprintf(os.Stderr, "MCP server listening on http://%s\n", addr)
+	fmt.Fprintf(os.Stderr, "SSE endpoint: http://%s/sse\n", addr)
+
+	go func() {
+		<-ctx.Done()
+		server.Shutdown(context.Background()) //nolint:errcheck
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // textResult wraps a JSON-serialisable value as a text tool result.
