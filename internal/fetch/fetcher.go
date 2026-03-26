@@ -10,18 +10,19 @@ import (
 )
 
 // tableURLs maps parquet table filenames to their OSF download URLs.
-// These are the real ATB parquet files hosted on OSF.
+// Source: https://osf.io/h7wzy/files/osfstorage
+// Path: Aggregated/Latest_2025-05/atb.metadata.202505.parquet/
 var tableURLs = map[string]string{
-	"assembly.parquet":       "https://osf.io/download/yfr5k/",
-	"assembly_stats.parquet": "https://osf.io/download/g9zh3/",
-	"checkm2.parquet":        "https://osf.io/download/7nxqe/",
-	"sylph.parquet":          "https://osf.io/download/p4s6d/",
-	"run.parquet":             "https://osf.io/download/3xm9j/",
-	"ena_20250506.parquet":   "https://osf.io/download/8k2bv/",
-	"gtdb_r220.parquet":      "https://osf.io/download/5hs7w/",
-	"kraken2_bracken.parquet": "https://osf.io/download/2np4r/",
-	"amr_resfinder.parquet":  "https://osf.io/download/9qx1m/",
-	"mlst.parquet":            "https://osf.io/download/6yt3c/",
+	"assembly.parquet":       "https://osf.io/download/4ku2n/",
+	"assembly_stats.parquet": "https://osf.io/download/69c51e86801fecc5d6146396/",
+	"checkm2.parquet":        "https://osf.io/download/69c51e93cba7111bb21d27f2/",
+	"sylph.parquet":          "https://osf.io/download/69c51f90cba7111bb21d2905/",
+	"run.parquet":            "https://osf.io/download/69c51f68376eb79a651d2d85/",
+	"ena_20250506.parquet":   "https://osf.io/download/69c51f3ab4f99c692d54cf73/",
+	"ena_20240801.parquet":   "https://osf.io/download/69c51f002e72f67915145d0e/",
+	"ena_20240625.parquet":   "https://osf.io/download/69c51ec99ce80b96ac54cd08/",
+	"ena_202505_used.parquet": "https://osf.io/download/69c51f475eedad376954ce7b/",
+	"ena_661k.parquet":       "https://osf.io/download/69c51f57376eb79a651d2d83/",
 }
 
 // coreTables lists the five essential tables for basic ATB operations.
