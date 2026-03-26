@@ -97,6 +97,44 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestSummariseFromTSV(t *testing.T) {
+	stdout, _, err := runCmd("summarise", "--from", "../../testdata/sample_results.tsv")
+	if err != nil {
+		t.Fatalf("summarise --from tsv failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "Total genomes:") {
+		t.Errorf("expected 'Total genomes:' in output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "5") {
+		t.Errorf("expected count 5 in output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "Klebsiella pneumoniae") {
+		t.Errorf("expected 'Klebsiella pneumoniae' in output, got:\n%s", stdout)
+	}
+}
+
+func TestSummariseFromCSV(t *testing.T) {
+	stdout, _, err := runCmd("summarise", "--from", "../../testdata/sample_results.csv")
+	if err != nil {
+		t.Fatalf("summarise --from csv failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "Total genomes:") {
+		t.Errorf("expected 'Total genomes:' in output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "Klebsiella pneumoniae") {
+		t.Errorf("expected 'Klebsiella pneumoniae' in output, got:\n%s", stdout)
+	}
+}
+
+func TestSummariseFromNonExistent(t *testing.T) {
+	_, _, err := runCmd("summarise", "--from", "/nonexistent/path/results.csv")
+	if err == nil {
+		t.Fatal("expected error for non-existent file, got nil")
+	}
+}
+
 func TestConfigShow(t *testing.T) {
 	stdout, _, err := runCmd("config", "show")
 	if err != nil {

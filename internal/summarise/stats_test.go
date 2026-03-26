@@ -82,6 +82,48 @@ func TestGroupByEmpty(t *testing.T) {
 	}
 }
 
+func TestDefaultSummaryFromCSVData(t *testing.T) {
+	// Simulate rows that would have been parsed from a CSV/TSV file.
+	rows := []query.ResultRow{
+		{"sample_accession": "SAMEA001", "hq_filter": "PASS", "sylph_species": "Klebsiella pneumoniae", "dataset": "gamma"},
+		{"sample_accession": "SAMEA002", "hq_filter": "PASS", "sylph_species": "Klebsiella pneumoniae", "dataset": "gamma"},
+		{"sample_accession": "SAMEA003", "hq_filter": "PASS", "sylph_species": "Klebsiella pneumoniae", "dataset": "delta"},
+		{"sample_accession": "SAMEA004", "hq_filter": "FAIL", "sylph_species": "Staphylococcus aureus", "dataset": "gamma"},
+		{"sample_accession": "SAMEA005", "hq_filter": "FAIL", "sylph_species": "Staphylococcus aureus", "dataset": "delta"},
+	}
+
+	s := summarise.DefaultSummary(rows)
+
+	if s.Total != 5 {
+		t.Errorf("Total: got %d, want 5", s.Total)
+	}
+	if s.HQCount != 3 {
+		t.Errorf("HQCount: got %d, want 3", s.HQCount)
+	}
+
+	// Klebsiella pneumoniae appears 3 times — should be first
+	if len(s.TopSpecies) == 0 {
+		t.Fatal("TopSpecies should not be empty")
+	}
+	if s.TopSpecies[0].Value != "Klebsiella pneumoniae" {
+		t.Errorf("TopSpecies[0]: got %q, want %q", s.TopSpecies[0].Value, "Klebsiella pneumoniae")
+	}
+	if s.TopSpecies[0].Count != 3 {
+		t.Errorf("TopSpecies[0].Count: got %d, want 3", s.TopSpecies[0].Count)
+	}
+
+	// gamma dataset appears 3 times — should be first
+	if len(s.Datasets) == 0 {
+		t.Fatal("Datasets should not be empty")
+	}
+	if s.Datasets[0].Value != "gamma" {
+		t.Errorf("Datasets[0]: got %q, want %q", s.Datasets[0].Value, "gamma")
+	}
+	if s.Datasets[0].Count != 3 {
+		t.Errorf("Datasets[0].Count: got %d, want 3", s.Datasets[0].Count)
+	}
+}
+
 func TestDefaultSummaryEmpty(t *testing.T) {
 	s := summarise.DefaultSummary(nil)
 	if s.Total != 0 {

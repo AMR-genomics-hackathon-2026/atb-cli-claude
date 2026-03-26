@@ -1,0 +1,6 @@
+sample_accession	hq_filter	sylph_species	dataset
+SAMEA001	PASS	Klebsiella pneumoniae	gamma
+SAMEA002	PASS	Klebsiella pneumoniae	gamma
+SAMEA003	PASS	Klebsiella pneumoniae	delta
+SAMEA004	FAIL	Staphylococcus aureus	gamma
+SAMEA005	FAIL	Staphylococcus aureus	delta
