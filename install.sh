@@ -30,9 +30,9 @@ detect_arch() {
 
 latest_version() {
     curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-        | grep '"tag_name"' \
+        | grep -o '"tag_name": *"[^"]*"' \
         | head -1 \
-        | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/'
+        | cut -d'"' -f4
 }
 
 main() {
