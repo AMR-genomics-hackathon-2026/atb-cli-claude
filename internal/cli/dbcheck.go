@@ -31,6 +31,20 @@ func ensureDatabase(dir string) error {
 		}
 	}
 
+	// Check if stdin is a terminal (can prompt interactively)
+	stat, _ := os.Stdin.Stat()
+	interactive := stat.Mode()&os.ModeCharDevice != 0
+
+	if !interactive {
+		reason := "data directory does not exist"
+		if dirErr == nil && !hasParquet {
+			reason = "no parquet files found"
+		} else if dirErr == nil && hasParquet {
+			reason = "missing required file assembly.parquet"
+		}
+		return fmt.Errorf("ATB database not found: %s (%s)\n\nTo fix this, run one of:\n  atb fetch                         # download core tables (~540 MB)\n  atb fetch --all                   # download all tables (~3 GB)\n  atb config set general.data_dir /your/path  # point to existing data", dir, reason)
+	}
+
 	fmt.Fprintf(os.Stderr, "\n")
 	fmt.Fprintf(os.Stderr, "  ╭─────────────────────────────────────────────────────╮\n")
 	fmt.Fprintf(os.Stderr, "  │          ATB Database Not Found                     │\n")
@@ -54,13 +68,6 @@ func ensureDatabase(dir string) error {
 	fmt.Fprintf(os.Stderr, "    [a] Download ALL tables (~3 GB) to %s\n", dir)
 	fmt.Fprintf(os.Stderr, "    [p] Specify a different path\n")
 	fmt.Fprintf(os.Stderr, "    [q] Quit\n\n")
-
-	// Check if stdin is a terminal (can prompt)
-	stat, _ := os.Stdin.Stat()
-	if stat.Mode()&os.ModeCharDevice == 0 {
-		// Not a terminal (piped input), can't prompt
-		return fmt.Errorf("database not found at %s\nRun 'atb fetch' to download, or set --data-dir", dir)
-	}
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Fprintf(os.Stderr, "  Choice [d/a/p/q]: ")
