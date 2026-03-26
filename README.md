@@ -339,18 +339,37 @@ Config is stored at `~/.config/atb/config.toml`.
 | `atb_stats` | Database summary statistics |
 | `atb_species_list` | List available species with genome counts |
 
-### Setup
+### Quick try (no install needed, requires Go)
+
+If you have Go installed, you can try it immediately without installing:
 
 ```bash
+# Claude Code - runs directly from GitHub
+claude mcp add atb -- go run github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest mcp --data-dir ~/atb/metadata/parquet
+```
+
+First call takes ~10s to compile; cached after that.
+
+### Setup (with installed binary)
+
+```bash
+# 1. Install atb
+curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+
+# 2. Fetch the database and build the index
+atb fetch
+
+# 3. Add to your LLM client:
+
 # Claude Code
-claude mcp add atb -- atb mcp --data-dir ~/atb/metadata/parquet
+claude mcp add atb -- atb mcp
 
 # Claude Desktop (add to claude_desktop_config.json)
 {
   "mcpServers": {
     "atb": {
       "command": "atb",
-      "args": ["mcp", "--data-dir", "/path/to/data"]
+      "args": ["mcp"]
     }
   }
 }
@@ -360,14 +379,16 @@ claude mcp add atb -- atb mcp --data-dir ~/atb/metadata/parquet
   "mcpServers": {
     "atb": {
       "command": "atb",
-      "args": ["mcp", "--data-dir", "/path/to/data"]
+      "args": ["mcp"]
     }
   }
 }
 
 # Cursor (Settings > MCP Servers > Add)
-# Command: atb mcp --data-dir ~/atb/metadata/parquet
+# Command: atb mcp
 ```
+
+> **Note:** If your data is in a non-default location, add `--data-dir /your/path` to the args.
 
 ### What you can ask your LLM
 
@@ -508,4 +529,4 @@ Requires Go 1.23+. Pure Go, no CGO - cross-compilation works out of the box.
 
 ## License
 
-TBD
+[MIT](LICENSE)
