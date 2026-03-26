@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 )
+
+// amrBaseURL is the root of Hive-partitioned AMR parquet files on GitHub.
+const amrBaseURL = "https://raw.githubusercontent.com/immem-hackathon-2025/atb-amr-shiny/main/data"
 
 // tableURLs maps parquet table filenames to their OSF download URLs.
 // Source: https://osf.io/h7wzy/files/osfstorage
@@ -119,6 +123,74 @@ func (f *Fetcher) FetchTable(name, url string, force bool) error {
 	if err := os.Rename(tmp, final); err != nil {
 		os.Remove(tmp)
 		return fmt.Errorf("renaming %s: %w", name, err)
+	}
+
+	return nil
+}
+
+// FetchAMRGenus downloads AMR parquet files for a specific genus from GitHub.
+// elementTypes may contain any combination of "amr", "stress", "virulence".
+// For each type it tries data_0.parquet, data_1.parquet, ... until a 404 is received.
+// Files are written atomically using a .tmp rename. Existing files are skipped unless force is true.
+func (f *Fetcher) FetchAMRGenus(genus string, elementTypes []string, force bool) error {
+	for _, et := range elementTypes {
+		dirName := et + "_by_genus"
+		// The '=' in the Hive partition dir name must be URL-encoded in GitHub raw URLs.
+		partitionSegment := "Genus%3D" + url.PathEscape(genus)
+		localDir := filepath.Join(f.cfg.DataDir, "amr", dirName, "Genus="+genus)
+
+		if err := os.MkdirAll(localDir, 0755); err != nil {
+			return fmt.Errorf("create amr dir %q: %w", localDir, err)
+		}
+
+		for n := 0; ; n++ {
+			filename := fmt.Sprintf("data_%d.parquet", n)
+			finalPath := filepath.Join(localDir, filename)
+
+			if !force {
+				if _, err := os.Stat(finalPath); err == nil {
+					continue // already present; keep probing for higher-numbered parts
+				}
+			}
+
+			rawURL := fmt.Sprintf("%s/%s/%s/%s", amrBaseURL, dirName, partitionSegment, filename)
+
+			resp, err := f.client.Get(rawURL)
+			if err != nil {
+				return fmt.Errorf("fetching %s: %w", rawURL, err)
+			}
+
+			if resp.StatusCode == http.StatusNotFound {
+				resp.Body.Close()
+				break // no more parts for this type/genus
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				resp.Body.Close()
+				return fmt.Errorf("fetching %s: HTTP %d", rawURL, resp.StatusCode)
+			}
+
+			tmp := finalPath + ".tmp"
+			out, err := os.Create(tmp)
+			if err != nil {
+				resp.Body.Close()
+				return fmt.Errorf("creating temp file for %s: %w", filename, err)
+			}
+
+			if _, err := io.Copy(out, resp.Body); err != nil {
+				out.Close()
+				resp.Body.Close()
+				os.Remove(tmp)
+				return fmt.Errorf("writing %s: %w", filename, err)
+			}
+			out.Close()
+			resp.Body.Close()
+
+			if err := os.Rename(tmp, finalPath); err != nil {
+				os.Remove(tmp)
+				return fmt.Errorf("renaming %s: %w", filename, err)
+			}
+		}
 	}
 
 	return nil
