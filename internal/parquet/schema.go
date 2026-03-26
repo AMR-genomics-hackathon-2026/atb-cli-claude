@@ -65,6 +65,20 @@ type ENARow struct {
 	FastqFTP           string `parquet:"fastq_ftp"`
 }
 
+type AMRRow struct {
+	Name           string  `parquet:"Name"`
+	GeneSymbol     string  `parquet:"Gene symbol"`
+	HierarchyNode  string  `parquet:"Hierarchy node"`
+	ElementType    string  `parquet:"Element type"`
+	ElementSubtype string  `parquet:"Element subtype"`
+	Coverage       float64 `parquet:"% Coverage of reference sequence"`
+	Identity       float64 `parquet:"% Identity to reference sequence"`
+	Method         string  `parquet:"Method"`
+	Class          string  `parquet:"Class"`
+	Subclass       string  `parquet:"Subclass"`
+	Species        string  `parquet:"Species"`
+}
+
 func GenusFromSpecies(species string) string {
 	if species == "" {
 		return ""
