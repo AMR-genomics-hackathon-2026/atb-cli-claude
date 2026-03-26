@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"os"
+
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/selfupdate"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +30,16 @@ func init() {
 	RootCmd.AddCommand(newVersionCmd())
 	RootCmd.AddCommand(newFetchCmd())
 	RootCmd.AddCommand(newSummariseCmd())
+	RootCmd.AddCommand(newUpdateCmd())
+
+	// Background update check (non-blocking, once every 24h)
+	originalPreRun := RootCmd.PersistentPreRun
+	RootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if originalPreRun != nil {
+			originalPreRun(cmd, args)
+		}
+		selfupdate.CheckInBackground(cmd.Root().Version, os.Stderr)
+	}
 }
 
 // NewRootCmd creates a fresh root command with its own flag state.
@@ -59,6 +72,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newFetchCmd())
 	root.AddCommand(newSummariseCmd())
+	root.AddCommand(newUpdateCmd())
 
 	return root
 }
