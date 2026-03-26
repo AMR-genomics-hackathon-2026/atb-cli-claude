@@ -344,8 +344,8 @@ Config is stored at `~/.config/atb/config.toml`.
 ### Quick try (no install needed, requires Go)
 
 ```bash
-# Claude Code - runs directly from GitHub, no install
-claude mcp add atb -- go run github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest mcp
+# Claude Code - runs directly from GitHub, available in all projects
+claude mcp add --scope user atb -- go run github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest mcp
 ```
 
 First call takes ~10s to compile; cached after that.
@@ -363,10 +363,14 @@ atb fetch
 ### stdio mode (Claude, Cursor, Codex CLI)
 
 ```bash
-# Claude Code
+# Claude Code (available globally in all projects)
+claude mcp add --scope user atb -- atb mcp
+
+# Claude Code (current project only)
 claude mcp add atb -- atb mcp
 
-# Claude Desktop (add to claude_desktop_config.json)
+# Claude Desktop (add to ~/Library/Application Support/Claude/claude_desktop_config.json on macOS
+#                  or %APPDATA%\Claude\claude_desktop_config.json on Windows)
 {
   "mcpServers": {
     "atb": {
@@ -384,6 +388,8 @@ claude mcp add atb -- atb mcp
 command = "atb"
 args = ["mcp"]
 ```
+
+> **Note:** After adding, restart your client for the MCP server to become available.
 
 ### HTTP/SSE mode (ChatGPT, OpenAI API, remote clients)
 
