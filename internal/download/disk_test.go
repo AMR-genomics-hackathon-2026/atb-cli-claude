@@ -1,32 +1,36 @@
 package download
 
 import (
+	"os"
 	"testing"
 )
 
 func TestAvailableSpace(t *testing.T) {
-	bytes, err := AvailableSpace("/tmp")
+	dir := os.TempDir()
+	bytes, err := AvailableSpace(dir)
 	if err != nil {
-		t.Fatalf("AvailableSpace(/tmp) error: %v", err)
+		t.Fatalf("AvailableSpace(%s) error: %v", dir, err)
 	}
 	if bytes == 0 {
-		t.Error("expected available space > 0 for /tmp, got 0")
+		t.Errorf("expected available space > 0 for %s, got 0", dir)
 	}
 }
 
 func TestCheckDiskSpace(t *testing.T) {
+	dir := os.TempDir()
+
 	t.Run("small download passes", func(t *testing.T) {
-		err := CheckDiskSpace("/tmp", 1024, 0)
+		err := CheckDiskSpace(dir, 1024, 0)
 		if err != nil {
-			t.Errorf("expected no error for 1024 bytes on /tmp, got: %v", err)
+			t.Errorf("expected no error for 1024 bytes, got: %v", err)
 		}
 	})
 
 	t.Run("huge download fails", func(t *testing.T) {
 		const oneExabyte = uint64(1 << 60)
-		err := CheckDiskSpace("/tmp", oneExabyte, 0)
+		err := CheckDiskSpace(dir, oneExabyte, 0)
 		if err == nil {
-			t.Error("expected error for 1 exabyte download on /tmp, got nil")
+			t.Error("expected error for 1 exabyte download, got nil")
 		}
 	})
 }
