@@ -274,6 +274,49 @@ Adding QC and assembly stats joins roughly doubles query time. RAM stays near 2.
 
 Downloads are memory-efficient (18 MB flat) and throughput scales with parallelism. Average genome assembly is ~1.5 MB compressed.
 
+### Query by species (single table)
+
+| Species | Time | Peak RAM | CPU |
+|---------|------|----------|-----|
+| Escherichia coli | 7.2s | 2.1 GB | 116% |
+| Staphylococcus aureus | 6.5s | 1.5 GB | 118% |
+| Salmonella enterica | 7.9s | 2.2 GB | 134% |
+| Klebsiella pneumoniae | 6.3s | 1.5 GB | 119% |
+| Pseudomonas aeruginosa | 6.3s | 1.4 GB | 119% |
+| Mycobacterium tuberculosis | 6.5s | 1.7 GB | 118% |
+| Streptococcus pneumoniae | 6.4s | 1.6 GB | 118% |
+| Acinetobacter baumannii | 6.2s | 1.4 GB | 118% |
+| Clostridioides difficile | 6.2s | 1.4 GB | 119% |
+
+RAM varies from 1.4-2.2 GB depending on how much of the parquet file is scanned. Rare species with fewer row groups to read use less memory. CPU is ~118% (parquet decompression is the bottleneck, uses ~1.2 cores).
+
+### Query by genus
+
+| Genus | Time | Peak RAM | CPU |
+|-------|------|----------|-----|
+| Salmonella | 7.9s | 2.2 GB | 137% |
+| Streptococcus | 6.8s | 1.9 GB | 118% |
+| Staphylococcus | 6.6s | 1.7 GB | 118% |
+| Escherichia | 7.3s | 2.2 GB | 121% |
+| Mycobacterium | 6.7s | 1.8 GB | 118% |
+
+### Multi-table join cost
+
+| Query | Time | Peak RAM | Tables joined |
+|-------|------|----------|---------------|
+| Species only | 7s | 2.1 GB | assembly |
+| + CheckM2 completeness | 11s | 2.2 GB | + checkm2 |
+| + N50 assembly stats | 11s | 2.1 GB | + assembly_stats |
+| + CheckM2 + N50 | 14s | 2.2 GB | + both |
+| + ENA country filter | 35s | 2.4 GB | + run + ena |
+| All filters combined | 42s | 2.7 GB | all 4 tables |
+
+ENA joins are the most expensive (+25s, +300 MB) because `ena_20250506.parquet` is 856 MB. Use ENA filters only when you need geographic or platform metadata.
+
+### Notes on species names
+
+The database uses GTDB taxonomy (not NCBI). Some species names differ from common usage. If a query returns 0 results, the tool suggests close matches. Example: *Enterococcus faecium* in GTDB may be *Enterococcus_B faecium*. Use `--species-like "Enterococcus%faecium"` to search across GTDB naming variants.
+
 ## Building
 
 ```bash
