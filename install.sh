@@ -71,7 +71,7 @@ main() {
     info "Downloading ${url}"
 
     tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' EXIT
+    trap 'rm -rf "${tmp:-}"' EXIT
 
     if ! curl -fsSL -o "${tmp}/archive.${ext}" "$url"; then
         error "Download failed. Check that version ${version} exists at:\n  https://github.com/${REPO}/releases"
