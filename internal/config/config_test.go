@@ -1,0 +1,143 @@
+package config_test
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/immem-hackathon-2025/atb-cli/internal/config"
+)
+
+func TestDefaultConfig(t *testing.T) {
+	cfg := config.Default()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("failed to get home dir: %v", err)
+	}
+
+	wantDataDir := filepath.Join(home, "atb", "metadata", "parquet")
+	if cfg.General.DataDir != wantDataDir {
+		t.Errorf("General.DataDir = %q, want %q", cfg.General.DataDir, wantDataDir)
+	}
+
+	if cfg.General.DefaultFormat != "auto" {
+		t.Errorf("General.DefaultFormat = %q, want %q", cfg.General.DefaultFormat, "auto")
+	}
+
+	if cfg.Fetch.Parallel != 4 {
+		t.Errorf("Fetch.Parallel = %d, want 4", cfg.Fetch.Parallel)
+	}
+
+	if cfg.Download.Parallel != 4 {
+		t.Errorf("Download.Parallel = %d, want 4", cfg.Download.Parallel)
+	}
+
+	if cfg.Download.CheckDiskSpace != true {
+		t.Errorf("Download.CheckDiskSpace = %v, want true", cfg.Download.CheckDiskSpace)
+	}
+
+	if cfg.Download.MinFreeSpaceGB != 10 {
+		t.Errorf("Download.MinFreeSpaceGB = %d, want 10", cfg.Download.MinFreeSpaceGB)
+	}
+}
+
+func TestLoadNonexistent(t *testing.T) {
+	nonexistentPath := filepath.Join(t.TempDir(), "does-not-exist.toml")
+
+	cfg, err := config.Load(nonexistentPath)
+	if err != nil {
+		t.Fatalf("Load(nonexistent) returned error: %v", err)
+	}
+
+	defaults := config.Default()
+	if cfg.General.DataDir != defaults.General.DataDir {
+		t.Errorf("General.DataDir = %q, want %q", cfg.General.DataDir, defaults.General.DataDir)
+	}
+	if cfg.Fetch.Parallel != defaults.Fetch.Parallel {
+		t.Errorf("Fetch.Parallel = %d, want %d", cfg.Fetch.Parallel, defaults.Fetch.Parallel)
+	}
+}
+
+func TestSaveAndLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "subdir", "config.toml")
+
+	original := config.Default()
+	original.General.DataDir = "/custom/data/path"
+	original.Fetch.BaseURL = "https://example.com/api"
+	original.Fetch.Parallel = 8
+	original.Download.OutputDir = "/custom/output"
+	original.Download.MinFreeSpaceGB = 20
+
+	if err := config.Save(original, path); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("config file was not created: %v", err)
+	}
+
+	loaded, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if loaded.General.DataDir != original.General.DataDir {
+		t.Errorf("General.DataDir = %q, want %q", loaded.General.DataDir, original.General.DataDir)
+	}
+	if loaded.Fetch.BaseURL != original.Fetch.BaseURL {
+		t.Errorf("Fetch.BaseURL = %q, want %q", loaded.Fetch.BaseURL, original.Fetch.BaseURL)
+	}
+	if loaded.Fetch.Parallel != original.Fetch.Parallel {
+		t.Errorf("Fetch.Parallel = %d, want %d", loaded.Fetch.Parallel, original.Fetch.Parallel)
+	}
+	if loaded.Download.OutputDir != original.Download.OutputDir {
+		t.Errorf("Download.OutputDir = %q, want %q", loaded.Download.OutputDir, original.Download.OutputDir)
+	}
+	if loaded.Download.MinFreeSpaceGB != original.Download.MinFreeSpaceGB {
+		t.Errorf("Download.MinFreeSpaceGB = %d, want %d", loaded.Download.MinFreeSpaceGB, original.Download.MinFreeSpaceGB)
+	}
+}
+
+func TestConfigPath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("failed to get home dir: %v", err)
+	}
+
+	want := filepath.Join(home, ".config", "atb", "config.toml")
+	got := config.DefaultPath()
+
+	if got != want {
+		t.Errorf("DefaultPath() = %q, want %q", got, want)
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("failed to get home dir: %v", err)
+	}
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"~/some/path", filepath.Join(home, "some/path")},
+		{"/absolute/path", "/absolute/path"},
+		{"relative/path", "relative/path"},
+		{"~", home},
+	}
+
+	for _, tt := range tests {
+		got, err := config.ExpandPath(tt.input)
+		if err != nil {
+			t.Errorf("ExpandPath(%q) returned error: %v", tt.input, err)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("ExpandPath(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
