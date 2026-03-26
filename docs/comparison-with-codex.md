@@ -202,17 +202,80 @@ Query approach: builds a unified Record model by joining ENA + assembly + checkm
 
 ## Performance
 
-Only atb-cli-claude has published benchmarks. Both use parquet-go for reading. Key architectural differences that affect performance:
+Benchmarked head-to-head on the same machine: Linux x86_64, 8 cores, 15 GB RAM, 3,227,665 genomes.
+Each test run 3 times (2 for stats). Same parquet files, both warmed up (codex SQLite index pre-built).
 
-| Factor | atb-cli-claude | atb-cli-codex |
-|--------|---------------|---------------|
-| Parquet reading | Struct-based column projection | Struct-based column projection |
-| Join strategy | Lazy (only load tables when needed) | Eager (loads ENA + assembly + checkm2 upfront for records) |
-| Single-sample lookup | Scans full table | Uses SQLite index (faster for repeated lookups) |
-| Download parallelism | Configurable workers | Sequential |
-| Memory | ~2.1 GB for species query | Likely similar (same parquet-go approach) |
+### Binary size
 
-Codex's SQLite index gives it an advantage for repeated queries and single-sample lookups. Claude's lazy joining gives it an advantage for simple queries that don't need all tables.
+| Tool | Size |
+|------|------|
+| atb-cli-claude | 17 MB |
+| atb-cli-codex | 24 MB |
+
+Codex is 41% larger, mostly due to the SQLite dependency (modernc.org/sqlite).
+
+### Species query (E. coli, HQ, limit 100)
+
+| Tool | Time (avg) | Peak RAM | CPU |
+|------|-----------|----------|-----|
+| **claude** | **7.3s** | 2,128 MB | 114% |
+| **codex** | **7.1s** | 1,016 MB | 111% |
+
+Nearly identical speed. Codex uses **52% less RAM** thanks to its SQLite index which avoids loading the full assembly.parquet into memory.
+
+### Species query (S. aureus, HQ, limit 100)
+
+| Tool | Time (avg) | Peak RAM | CPU |
+|------|-----------|----------|-----|
+| **claude** | **6.4s** | 1,531 MB | 119% |
+| **codex** | **3.4s** | 339 MB | 109% |
+
+Codex is **1.9x faster** and uses **78% less RAM**. The SQLite index allows targeted lookup without scanning the full parquet file.
+
+### Single sample lookup (atb info SAMD00000355)
+
+| Tool | Time (avg) | Peak RAM | CPU |
+|------|-----------|----------|-----|
+| **claude** | **39.5s** | 2,174 MB | 105% |
+| **codex** | **2.6s** | 44 MB | 101% |
+
+Codex is **15x faster** and uses **98% less RAM**. This is where the SQLite index pays off the most - claude must scan multiple full parquet files to find one sample, while codex does an indexed lookup.
+
+### Query with QC join (E. coli, completeness >= 99, limit 100)
+
+| Tool | Time (avg) | Peak RAM | CPU |
+|------|-----------|----------|-----|
+| **claude** | **10.9s** | 2,176 MB | 131% |
+| **codex** | **7.1s** | 1,136 MB | 113% |
+
+Codex is **1.5x faster** with **48% less RAM**. Claude loads both assembly + checkm2 tables; codex's pre-joined index already has completeness data.
+
+### Full database summary (stats/summarise)
+
+| Tool | Time (avg) | Peak RAM | CPU |
+|------|-----------|----------|-----|
+| **claude** | **15.9s** | 3,620 MB | 178% |
+| **codex** | **47.6s** | 6,915 MB | 114% |
+
+Claude is **3x faster** with **48% less RAM**. This reverses the trend - for a full-database scan, claude's lazy parquet reading is more efficient than codex's approach of loading all ENA records into memory to build the full record set.
+
+### Summary table
+
+| Operation | Claude time | Codex time | Winner | Claude RAM | Codex RAM | Winner |
+|-----------|-----------|-----------|--------|-----------|-----------|--------|
+| E. coli query | 7.3s | 7.1s | Tie | 2.1 GB | 1.0 GB | Codex |
+| S. aureus query | 6.4s | 3.4s | Codex | 1.5 GB | 339 MB | Codex |
+| Single sample info | 39.5s | 2.6s | Codex | 2.2 GB | 44 MB | Codex |
+| QC join query | 10.9s | 7.1s | Codex | 2.2 GB | 1.1 GB | Codex |
+| Full DB summary | 15.9s | 47.6s | Claude | 3.6 GB | 6.9 GB | Claude |
+
+### Analysis
+
+Codex wins most query benchmarks decisively, especially single-sample lookups (15x faster). Its SQLite index strategy trades one-time index-building cost for dramatically faster queries and lower memory usage.
+
+Claude wins the full-database summary because its lazy parquet reader only loads what's needed, while codex's approach of building a full ENA-based record set is expensive when you need all 3.5M rows.
+
+**Key takeaway:** The SQLite index is the single biggest performance differentiator. If claude adopted a similar indexing strategy, it would match or beat codex across the board while keeping its advantages in download reliability and user experience.
 
 ---
 
