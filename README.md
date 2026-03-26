@@ -1,8 +1,10 @@
 # atb-cli
 
-A command-line tool for querying the [AllTheBacteria](https://osf.io/xv7q9/) genomics database (~3.2M bacterial genomes) and downloading genome assemblies.
+A command-line tool for querying the [AllTheBacteria](https://osf.io/xv7q9/) genomics database (~3.2M bacterial genomes), searching AMR/stress/virulence genes, and downloading genome assemblies.
 
-Single binary, no dependencies. Runs on Linux, macOS, and Windows (amd64/arm64).
+Single binary, no dependencies.
+
+**Supported platforms:** Linux, macOS, Windows (amd64 and arm64)
 
 ## Install
 
@@ -227,17 +229,65 @@ atb query --species "Escherichia coli" --hq-only --limit 200 \
   atb summarise --from -
 ```
 
+### Query AMR genes
+
+AMR data comes from [AMRFinderPlus](https://github.com/ncbi/amr) results run across all ATB genomes. Data is organized by genus and includes three categories: AMR resistance genes, stress response genes, and virulence factors.
+
+```bash
+# First, fetch AMR data for the genus you need
+atb fetch --amr --genus Escherichia
+
+# Get all AMR gene hits for E. coli (high-quality genomes only)
+atb amr --species "Escherichia coli" --hq-only --limit 100
+
+# Filter by drug class
+atb amr --species "Escherichia coli" --hq-only --class "BETA-LACTAM"
+
+# Wildcard gene search (all beta-lactamase genes)
+atb amr --species "Escherichia coli" --gene "bla%"
+
+# Filter by detection quality
+atb amr --species "Escherichia coli" --min-coverage 95 --min-identity 98
+
+# Query stress response genes
+atb amr --species "Escherichia coli" --type stress
+
+# Query virulence factors
+atb amr --species "Escherichia coli" --type virulence
+
+# Query all three categories at once
+atb amr --species "Escherichia coli" --type all
+
+# Output to file
+atb amr --species "Klebsiella pneumoniae" --hq-only --format csv -o kpn_amr.csv
+
+# Fetch AMR data for multiple genera
+atb fetch --amr --genus Escherichia,Salmonella,Klebsiella
+
+# Fetch all three element types
+atb fetch --amr --genus Escherichia --amr-types amr,stress,virulence
+```
+
+AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`
+
 ### Fetch the database
 
 ```bash
-# Download core tables (~540MB: assembly, assembly_stats, checkm2, sylph, run)
+# Download core metadata tables (~540MB: assembly, assembly_stats, checkm2, sylph, run)
 atb fetch
 
-# Download all tables including ENA metadata (~3GB)
+# Download all metadata tables including ENA (~3GB)
 atb fetch --all
 
-# Download specific tables
+# Download specific metadata tables
 atb fetch --tables ena_20250506.parquet
+
+# Download AMR gene data by genus
+atb fetch --amr --genus Escherichia
+atb fetch --amr --genus Salmonella,Klebsiella,Pseudomonas
+
+# Download AMR + stress + virulence data
+atb fetch --amr --genus Escherichia --amr-types amr,stress,virulence
 
 # Force re-download
 atb fetch --force
@@ -374,21 +424,28 @@ The database uses GTDB taxonomy (not NCBI). Some species names differ from commo
 ## Building
 
 ```bash
-# Build
+# Build for current platform
 make build
 
 # Run tests
 make test
 
-# Cross-compile check
-GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/atb
+# Cross-compile for all supported platforms
+GOOS=linux   GOARCH=amd64 go build -o bin/atb-linux-amd64   ./cmd/atb
+GOOS=linux   GOARCH=arm64 go build -o bin/atb-linux-arm64   ./cmd/atb
+GOOS=darwin  GOARCH=amd64 go build -o bin/atb-darwin-amd64  ./cmd/atb
+GOOS=darwin  GOARCH=arm64 go build -o bin/atb-darwin-arm64  ./cmd/atb
+GOOS=windows GOARCH=amd64 go build -o bin/atb-windows-amd64.exe ./cmd/atb
+GOOS=windows GOARCH=arm64 go build -o bin/atb-windows-arm64.exe ./cmd/atb
 ```
 
-Requires Go 1.22+.
+Requires Go 1.23+. Pure Go, no CGO - cross-compilation works out of the box.
 
-## Data Source
+## Data Sources
 
-The parquet files are from the [AllTheBacteria](https://allthebacteria.org) project, hosted at [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage), path: `Aggregated/Latest_2025-05/atb.metadata.202505.parquet/`.
+**Metadata** (assembly, QC, ENA): [AllTheBacteria](https://allthebacteria.org) project on [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage), path: `Aggregated/Latest_2025-05/atb.metadata.202505.parquet/`
+
+**AMR/Stress/Virulence genes**: [AMRFinderPlus](https://github.com/ncbi/amr) results from the [atb-amr-shiny](https://github.com/immem-hackathon-2025/atb-amr-shiny) project, Hive-partitioned by genus under `data/amr_by_genus/`, `data/stress_by_genus/`, `data/virulence_by_genus/`
 
 ## License
 
