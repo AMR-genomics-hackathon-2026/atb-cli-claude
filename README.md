@@ -402,12 +402,19 @@ Then configure your client with the SSE endpoint URL:
 - **ChatGPT:** Settings > Connected apps > Add MCP server > `http://your-host:8080/sse`
 - **OpenAI Responses API:** Use `server_url: "http://your-host:8080/sse"` in the MCP tool config
 
-For public access, use a reverse proxy (nginx/caddy) or tunnel (ngrok):
+For public access, deploy with Docker or use a tunnel:
+
 ```bash
-# Quick public URL with ngrok
+# Docker (auto-downloads data on first run)
+docker compose up -d
+# SSE endpoint: http://localhost:8080/sse
+
+# Or quick public URL with ngrok
+atb mcp --http :8080 &
 ngrok http 8080
-# Use the ngrok URL as your SSE endpoint
 ```
+
+See [docs/deployment.md](docs/deployment.md) for full deployment guides (Fly.io, Railway, VPS, Docker Compose).
 
 > **Note:** If your data is in a non-default location, add `--data-dir /your/path` to all commands above.
 

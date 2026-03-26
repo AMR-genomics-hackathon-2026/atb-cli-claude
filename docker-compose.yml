@@ -1,0 +1,18 @@
+services:
+  atb-mcp:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - atb-data:/data
+    environment:
+      - ATB_DATA_DIR=/data
+      - ATB_HTTP_PORT=8080
+    restart: unless-stopped
+    # First run downloads ~540 MB and builds index (~4 min).
+    # Subsequent starts are instant since data persists in the volume.
+
+volumes:
+  atb-data:
+    # Named volume persists parquet files + SQLite index across restarts.
+    # Total size: ~1.7 GB (540 MB parquet + 1.2 GB index)
