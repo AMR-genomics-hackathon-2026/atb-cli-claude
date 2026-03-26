@@ -327,7 +327,9 @@ Config is stored at `~/.config/atb/config.toml`.
 
 `atb` includes a built-in [Model Context Protocol](https://modelcontextprotocol.io) server, allowing LLMs to query the AllTheBacteria database directly through natural language.
 
-**Supported clients:** Claude Code, Claude Desktop, ChatGPT, OpenAI Codex, Cursor, VS Code Copilot, Windsurf, and any MCP-compatible client.
+**Two transport modes:**
+- **stdio** (default) - for Claude Code, Claude Desktop, Cursor, VS Code Copilot, Windsurf, OpenAI Codex CLI
+- **HTTP/SSE** (`--http :8080`) - for ChatGPT, OpenAI Responses API, remote clients
 
 **Tools exposed:**
 
@@ -341,16 +343,14 @@ Config is stored at `~/.config/atb/config.toml`.
 
 ### Quick try (no install needed, requires Go)
 
-If you have Go installed, you can try it immediately without installing:
-
 ```bash
-# Claude Code - runs directly from GitHub
-claude mcp add atb -- go run github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest mcp --data-dir ~/atb/metadata/parquet
+# Claude Code - runs directly from GitHub, no install
+claude mcp add atb -- go run github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest mcp
 ```
 
 First call takes ~10s to compile; cached after that.
 
-### Setup (with installed binary)
+### Setup
 
 ```bash
 # 1. Install atb
@@ -358,9 +358,11 @@ curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli
 
 # 2. Fetch the database and build the index
 atb fetch
+```
 
-# 3. Add to your LLM client:
+### stdio mode (Claude, Cursor, Codex CLI)
 
+```bash
 # Claude Code
 claude mcp add atb -- atb mcp
 
@@ -374,21 +376,34 @@ claude mcp add atb -- atb mcp
   }
 }
 
-# ChatGPT / OpenAI (add to MCP server config)
-{
-  "mcpServers": {
-    "atb": {
-      "command": "atb",
-      "args": ["mcp"]
-    }
-  }
-}
-
 # Cursor (Settings > MCP Servers > Add)
 # Command: atb mcp
+
+# OpenAI Codex CLI (~/.codex/config.toml)
+[mcp_servers.atb]
+command = "atb"
+args = ["mcp"]
 ```
 
-> **Note:** If your data is in a non-default location, add `--data-dir /your/path` to the args.
+### HTTP/SSE mode (ChatGPT, OpenAI API, remote clients)
+
+```bash
+# Start the HTTP/SSE server
+atb mcp --http :8080
+```
+
+Then configure your client with the SSE endpoint URL:
+- **ChatGPT:** Settings > Connected apps > Add MCP server > `http://your-host:8080/sse`
+- **OpenAI Responses API:** Use `server_url: "http://your-host:8080/sse"` in the MCP tool config
+
+For public access, use a reverse proxy (nginx/caddy) or tunnel (ngrok):
+```bash
+# Quick public URL with ngrok
+ngrok http 8080
+# Use the ngrok URL as your SSE endpoint
+```
+
+> **Note:** If your data is in a non-default location, add `--data-dir /your/path` to all commands above.
 
 ### What you can ask your LLM
 
