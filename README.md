@@ -61,6 +61,27 @@ If you don't have the parquet files yet:
 ./bin/atb fetch --all
 ```
 
+## Updating
+
+`atb` checks for new versions automatically in the background (once every 24 hours). If a newer release is found, you'll see a notice:
+
+```
+  A new version of atb is available: v0.2.0 (current: v0.1.0)
+  Run 'atb update' to upgrade.
+```
+
+To update:
+
+```bash
+# Interactive update (asks for confirmation)
+atb update
+
+# Non-interactive (for scripts/CI)
+atb update --force
+```
+
+The updater downloads the correct binary for your OS/architecture from GitHub Releases and replaces the current binary in place.
+
 ## Usage Examples
 
 ### Query genomes by species
