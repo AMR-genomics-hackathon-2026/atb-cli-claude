@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -191,6 +192,30 @@ func Execute(dataDir string, filters Filters, columns []string) ([]ResultRow, er
 	}
 
 	return results, nil
+}
+
+// SortResults sorts rows in place by the given column. If sortBy is empty, it
+// is a no-op. Numeric values are compared numerically; everything else falls
+// back to lexicographic string comparison.
+func SortResults(rows []ResultRow, sortBy string, desc bool) {
+	if sortBy == "" {
+		return
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i][sortBy], rows[j][sortBy]
+		na, errA := strconv.ParseFloat(a, 64)
+		nb, errB := strconv.ParseFloat(b, 64)
+		if errA == nil && errB == nil {
+			if desc {
+				return na > nb
+			}
+			return na < nb
+		}
+		if desc {
+			return a > b
+		}
+		return a < b
+	})
 }
 
 func buildRow(sd *sampleData) ResultRow {

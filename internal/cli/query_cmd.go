@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -185,17 +184,7 @@ func newQueryCmd() *cobra.Command {
 			}
 
 			// Sort if requested
-			if outCfg.SortBy != "" {
-				sortKey := outCfg.SortBy
-				desc := outCfg.SortDesc
-				sort.SliceStable(results, func(i, j int) bool {
-					vi, vj := results[i][sortKey], results[j][sortKey]
-					if desc {
-						return vi > vj
-					}
-					return vi < vj
-				})
-			}
+			query.SortResults(results, outCfg.SortBy, outCfg.SortDesc)
 
 			// Apply offset
 			if outCfg.Offset > 0 {

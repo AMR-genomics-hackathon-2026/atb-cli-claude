@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -121,5 +122,49 @@ func TestExecuteNoResults(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Errorf("expected 0 results for nonexistent species, got %d", len(rows))
+	}
+}
+
+func TestSortResultsNumeric(t *testing.T) {
+	rows := []ResultRow{
+		{"N50": "100000"},
+		{"N50": "250000"},
+		{"N50": "50000"},
+	}
+	SortResults(rows, "N50", true) // descending
+	first, _ := strconv.ParseFloat(rows[0]["N50"], 64)
+	last, _ := strconv.ParseFloat(rows[len(rows)-1]["N50"], 64)
+	if first < last {
+		t.Errorf("expected descending numeric sort: first=%v should be >= last=%v", first, last)
+	}
+}
+
+func TestSortResultsString(t *testing.T) {
+	rows := []ResultRow{
+		{"sylph_species": "Staphylococcus aureus"},
+		{"sylph_species": "Acinetobacter baumannii"},
+		{"sylph_species": "Escherichia coli"},
+	}
+	SortResults(rows, "sylph_species", false) // ascending
+	for i := 1; i < len(rows); i++ {
+		if rows[i-1]["sylph_species"] > rows[i]["sylph_species"] {
+			t.Errorf("expected ascending string sort at index %d: %q > %q",
+				i, rows[i-1]["sylph_species"], rows[i]["sylph_species"])
+		}
+	}
+}
+
+func TestSortResultsEmpty(t *testing.T) {
+	rows := []ResultRow{
+		{"N50": "300000"},
+		{"N50": "100000"},
+	}
+	original := []string{rows[0]["N50"], rows[1]["N50"]}
+	SortResults(rows, "", false) // empty sortBy: no-op
+	for i, row := range rows {
+		if row["N50"] != original[i] {
+			t.Errorf("expected no-op sort with empty sortBy: row %d changed from %q to %q",
+				i, original[i], row["N50"])
+		}
 	}
 }
