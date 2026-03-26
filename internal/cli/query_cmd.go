@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	pq "github.com/immem-hackathon-2025/atb-cli/internal/parquet"
-	"github.com/immem-hackathon-2025/atb-cli/internal/output"
-	"github.com/immem-hackathon-2025/atb-cli/internal/query"
-	"github.com/immem-hackathon-2025/atb-cli/internal/suggest"
+	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/suggest"
 )
 
 func newQueryCmd() *cobra.Command {

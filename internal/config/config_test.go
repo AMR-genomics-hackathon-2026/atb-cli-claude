@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/immem-hackathon-2025/atb-cli/internal/config"
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
 )
 
 func TestDefaultConfig(t *testing.T) {

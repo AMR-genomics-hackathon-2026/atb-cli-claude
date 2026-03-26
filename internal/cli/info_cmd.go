@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	pq "github.com/immem-hackathon-2025/atb-cli/internal/parquet"
+	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
 
 func newInfoCmd() *cobra.Command {

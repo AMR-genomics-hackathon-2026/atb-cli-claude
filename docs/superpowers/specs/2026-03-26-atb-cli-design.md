@@ -458,7 +458,7 @@ atb-cli/
 | GitHub Releases | `goreleaser` for linux/macos amd64/arm64 |
 | Homebrew | Tap formula |
 | Bioconda | Future |
-| Go install | `go install github.com/immem-hackathon-2025/atb-cli@latest` |
+| Go install | `go install github.com/AMR-genomics-hackathon-2026/atb-cli-claude@latest` |
 
 ---
 

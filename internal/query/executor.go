@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	pq "github.com/immem-hackathon-2025/atb-cli/internal/parquet"
+	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
 
 // ResultRow is a single query result as a map of column name to string value.

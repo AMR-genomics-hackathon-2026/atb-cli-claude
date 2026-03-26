@@ -1,4 +1,4 @@
-module github.com/immem-hackathon-2025/atb-cli
+module github.com/AMR-genomics-hackathon-2026/atb-cli-claude
 
 go 1.25.0
 
