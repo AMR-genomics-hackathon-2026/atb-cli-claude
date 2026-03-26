@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
@@ -174,9 +175,49 @@ func newQueryCmd() *cobra.Command {
 				outCfg.Output = outputFile
 			}
 
-			results, err := query.Execute(dir, filters, outCfg.Columns)
-			if err != nil {
-				return fmt.Errorf("query failed: %w", err)
+			// Try SQLite index first (much faster).
+			var results []query.ResultRow
+			var queryErr error
+			if idx.Exists(dir) {
+				if db, openErr := idx.Open(dir); openErr == nil {
+					defer db.Close()
+					params := idx.QueryParams{
+						Species:          filters.Species,
+						SpeciesLike:      filters.SpeciesLike,
+						Genus:            filters.Genus,
+						HQOnly:           filters.HQOnly,
+						MinCompleteness:  filters.MinCompleteness,
+						MaxContamination: filters.MaxContamination,
+						MinN50:           filters.MinN50,
+						Dataset:          filters.Dataset,
+						HasAssembly:      filters.HasAssembly,
+						Samples:          filters.Samples,
+						Columns:          outCfg.Columns,
+						SortBy:           outCfg.SortBy,
+						SortDesc:         outCfg.SortDesc,
+						Limit:            outCfg.Limit,
+						Offset:           outCfg.Offset,
+					}
+					// ENA filters (country, platform, date) are not in the index;
+					// fall through to parquet scan if any are set.
+					if !filters.NeedsENA() {
+						idxRows, idxErr := db.Query(params)
+						if idxErr == nil {
+							results = make([]query.ResultRow, len(idxRows))
+							for i, r := range idxRows {
+								results[i] = query.ResultRow(r)
+							}
+							// Skip the parquet scan and post-processing below;
+							// index already applied limit/offset/sort.
+							goto renderOutput
+						}
+					}
+				}
+			}
+
+			results, queryErr = query.Execute(dir, filters, outCfg.Columns)
+			if queryErr != nil {
+				return fmt.Errorf("query failed: %w", queryErr)
 			}
 
 			// Suggest species if no results and a species filter was set
@@ -220,6 +261,7 @@ func newQueryCmd() *cobra.Command {
 				results = results[:outCfg.Limit]
 			}
 
+		renderOutput:
 			// Determine columns
 			cols := outCfg.Columns
 			if len(cols) == 0 {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
 
@@ -38,6 +39,47 @@ func newInfoCmd() *cobra.Command {
 			}
 
 			w := cmd.OutOrStdout()
+
+			// Try SQLite index first (instant single-sample lookup).
+			if idx.Exists(dir) {
+				if db, openErr := idx.Open(dir); openErr == nil {
+					defer db.Close()
+					if row, rowErr := db.InfoRow(accession); rowErr == nil {
+						fmt.Fprintln(w, "=== Assembly ===")
+						fmt.Fprintf(w, "  sample_accession:   %s\n", row["sample_accession"])
+						fmt.Fprintf(w, "  run_accession:      %s\n", row["run_accession"])
+						fmt.Fprintf(w, "  assembly_accession: %s\n", row["assembly_accession"])
+						fmt.Fprintf(w, "  sylph_species:      %s\n", row["sylph_species"])
+						fmt.Fprintf(w, "  scientific_name:    %s\n", row["scientific_name"])
+						fmt.Fprintf(w, "  hq_filter:          %s\n", row["hq_filter"])
+						fmt.Fprintf(w, "  dataset:            %s\n", row["dataset"])
+						fmt.Fprintf(w, "  asm_fasta_on_osf:   %s\n", row["asm_fasta_on_osf"])
+						fmt.Fprintf(w, "  aws_url:            %s\n", row["aws_url"])
+						fmt.Fprintf(w, "  osf_tarball_url:    %s\n", row["osf_tarball_url"])
+						fmt.Fprintln(w)
+
+						if row["N50"] != "" {
+							fmt.Fprintln(w, "=== Assembly Stats ===")
+							fmt.Fprintf(w, "  total_length: %s\n", row["total_length"])
+							fmt.Fprintf(w, "  number:       %s\n", row["number"])
+							fmt.Fprintf(w, "  N50:          %s\n", row["N50"])
+							fmt.Fprintf(w, "  N90:          %s\n", row["N90"])
+							fmt.Fprintln(w)
+						}
+
+						if row["Completeness_General"] != "" {
+							fmt.Fprintln(w, "=== CheckM2 Quality ===")
+							fmt.Fprintf(w, "  completeness_general: %s\n", row["Completeness_General"])
+							fmt.Fprintf(w, "  contamination:        %s\n", row["Contamination"])
+							fmt.Fprintf(w, "  genome_size:          %s\n", row["Genome_Size"])
+							fmt.Fprintf(w, "  gc_content:           %s\n", row["GC_Content"])
+							fmt.Fprintln(w)
+						}
+						return nil
+					}
+				}
+			}
+
 			found := false
 
 			// Assembly info
