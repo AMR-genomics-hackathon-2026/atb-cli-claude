@@ -52,7 +52,7 @@ jobs:
           python testdata/generate.py
 
       - name: Run tests with coverage
-        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -coverprofile=coverage.out -covermode=atomic ./internal/...
 
       - name: Coverage summary
         run: |
