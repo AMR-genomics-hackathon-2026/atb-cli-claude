@@ -1,18 +1,6 @@
 package download
 
-import (
-	"fmt"
-	"syscall"
-)
-
-// AvailableSpace returns available bytes on the filesystem containing path.
-func AvailableSpace(path string) (uint64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
-		return 0, fmt.Errorf("statfs %s: %w", path, err)
-	}
-	return stat.Bavail * uint64(stat.Bsize), nil
-}
+import "fmt"
 
 // CheckDiskSpace verifies there's enough space for the download.
 // It checks that available space on dir is at least neededBytes plus minFreeGB gigabytes.

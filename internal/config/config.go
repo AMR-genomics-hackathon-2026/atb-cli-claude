@@ -38,14 +38,21 @@ type DownloadConfig struct {
 }
 
 // DefaultDataDir returns the OS-standard data directory for ATB.
+// On Windows: %LOCALAPPDATA%\atb\data
 // On macOS: ~/Library/Application Support/atb/data
 // On Linux/other: $XDG_DATA_HOME/atb/data or ~/.local/share/atb/data
 func DefaultDataDir() string {
 	switch runtime.GOOS {
+	case "windows":
+		if appdata := os.Getenv("LOCALAPPDATA"); appdata != "" {
+			return filepath.Join(appdata, "atb", "data")
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "AppData", "Local", "atb", "data")
 	case "darwin":
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, "Library", "Application Support", "atb", "data")
-	default: // linux and others
+	default:
 		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
 			return filepath.Join(xdg, "atb", "data")
 		}
@@ -76,10 +83,17 @@ func Default() Config {
 }
 
 // DefaultPath returns the default config file path.
+// On Windows: %LOCALAPPDATA%\atb\config.toml
 // On macOS: ~/Library/Application Support/atb/config.toml
 // On Linux/other: $XDG_CONFIG_HOME/atb/config.toml or ~/.config/atb/config.toml
 func DefaultPath() string {
 	switch runtime.GOOS {
+	case "windows":
+		if appdata := os.Getenv("LOCALAPPDATA"); appdata != "" {
+			return filepath.Join(appdata, "atb", "config.toml")
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "AppData", "Local", "atb", "config.toml")
 	case "darwin":
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, "Library", "Application Support", "atb", "config.toml")
