@@ -1,0 +1,77 @@
+package cli
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/immem-hackathon-2025/atb-cli/internal/query"
+	"github.com/immem-hackathon-2025/atb-cli/internal/summarise"
+)
+
+func newSummariseCmd() *cobra.Command {
+	var (
+		by   []string
+		topN int
+		from string
+	)
+
+	cmd := &cobra.Command{
+		Use:     "summarise",
+		Aliases: []string{"summarize"},
+		Short:   "Print summary statistics for the ATB database",
+		Long: `Print summary statistics for all genomes in the local ATB database.
+
+By default prints total counts, HQ fraction, top species, and dataset breakdown.
+Use --by to group results by a specific column (e.g. --by sylph_species).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if from != "" {
+				return fmt.Errorf("--from is not yet supported; query first and pipe results")
+			}
+
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			dir := dataDir
+			if dir == "" {
+				dir = cfg.General.DataDir
+			}
+
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				return fmt.Errorf("data directory does not exist: %s\n\nRun 'atb fetch' to download parquet tables.", dir)
+			}
+
+			// Run a full query with no filters to get all rows
+			rows, err := query.Execute(dir, query.Filters{}, nil)
+			if err != nil {
+				return fmt.Errorf("reading database: %w", err)
+			}
+
+			w := cmd.OutOrStdout()
+
+			if len(by) > 0 {
+				for _, dim := range by {
+					dim = strings.TrimSpace(dim)
+					groups := summarise.GroupBy(rows, dim)
+					summarise.PrintGroupBy(w, groups, dim, topN)
+					fmt.Fprintln(w)
+				}
+				return nil
+			}
+
+			s := summarise.DefaultSummary(rows)
+			summarise.PrintSummary(w, s, topN)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringSliceVar(&by, "by", nil, "group results by column(s) (e.g. --by sylph_species)")
+	cmd.Flags().IntVar(&topN, "top", 10, "number of top entries to show per group")
+	cmd.Flags().StringVar(&from, "from", "", "future: read rows from a query result file (not yet supported)")
+
+	return cmd
+}
