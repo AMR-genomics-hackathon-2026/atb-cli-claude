@@ -352,82 +352,71 @@ atb query --species "E. coli" --limit 5 --format table   # pretty table
 
 Benchmarked on Linux x86_64, 8 cores, 15 GB RAM. Database: 3,227,665 genomes.
 
-Run `bash benchmark.sh` to reproduce these results on your machine.
+Run `bash benchmark.sh` to reproduce on your machine.
 
-### Query (single table - assembly.parquet only)
+### With SQLite index (default after `atb fetch`)
 
-| Limit | Wall time | Peak RAM | CPU |
-|-------|-----------|----------|-----|
-| 10 | 7.1s | 2.1 GB | 117% |
-| 20 | 7.1s | 2.1 GB | 116% |
-| 30 | 7.1s | 2.1 GB | 116% |
-| 40 | 7.1s | 2.1 GB | 116% |
-| 50 | 7.1s | 2.1 GB | 116% |
+The index is built automatically during `atb fetch` (one-time cost: ~4 minutes, produces a 1.2 GB SQLite file). All subsequent queries use the index.
 
-Query time is constant regardless of `--limit` because the full parquet file is scanned and filtered, then the limit is applied. RAM usage is ~2.1 GB (the assembly.parquet file decompressed in memory).
+| Operation | Time | Peak RAM |
+|-----------|------|----------|
+| Single sample info (`atb info`) | **<10ms** | **14 MB** |
+| Species query (E. coli, HQ, limit 100) | **<10ms** | **15 MB** |
+| Species query (S. aureus, HQ, limit 100) | **<10ms** | **17 MB** |
+| Species + completeness + N50 filter | **<10ms** | **15 MB** |
 
-### Query with joins (assembly + checkm2 + assembly_stats)
+Queries are effectively instant. The SQLite index pre-joins assembly, assembly_stats, and checkm2 data into one indexed table, so no parquet scanning is needed.
 
-| Limit | Wall time | Peak RAM | CPU |
-|-------|-----------|----------|-----|
-| 10 | 15.9s | 2.2 GB | 126% |
-| 20 | 15.9s | 2.2 GB | 125% |
-| 30 | 16.0s | 2.2 GB | 126% |
-| 40 | 15.9s | 2.1 GB | 127% |
-| 50 | 15.8s | 2.2 GB | 125% |
+### Improvement over parquet-only scan
 
-Adding QC and assembly stats joins roughly doubles query time. RAM stays near 2.2 GB.
+| Operation | Before (parquet) | After (SQLite) | Speedup | RAM reduction |
+|-----------|-----------------|----------------|---------|---------------|
+| Single sample info | 39.5s / 2.2 GB | <10ms / 14 MB | **~4,000x** | **99.4%** |
+| E. coli species query | 7.3s / 2.1 GB | <10ms / 15 MB | **~700x** | **99.3%** |
+| S. aureus species query | 6.4s / 1.5 GB | <10ms / 17 MB | **~600x** | **98.9%** |
+| QC join query | 10.9s / 2.2 GB | <10ms / 15 MB | **~1,000x** | **99.3%** |
+
+### ENA queries (parquet scan, no index)
+
+Queries involving ENA metadata (country, platform, collection date) still use parquet scanning because ENA data is not included in the index (it would add 856 MB and slow index builds significantly).
+
+| Query | Time | Peak RAM |
+|-------|------|----------|
+| Species + country filter | ~35s | 2.4 GB |
+| Species + country + platform + dates | ~42s | 2.7 GB |
 
 ### Download (genome FASTA from AWS S3, parallel=4)
 
-| Files | Wall time | Peak RAM | Total size | Throughput |
-|-------|-----------|----------|------------|------------|
+| Files | Time | Peak RAM | Total size | Throughput |
+|-------|------|----------|------------|------------|
 | 10 | 2.2s | 18 MB | 16 MB | 7 MB/s |
 | 20 | 2.5s | 18 MB | 31 MB | 13 MB/s |
 | 30 | 3.1s | 18 MB | 46 MB | 15 MB/s |
 | 40 | 3.2s | 18 MB | 62 MB | 20 MB/s |
 | 50 | 3.8s | 18 MB | 77 MB | 21 MB/s |
 
-Downloads are memory-efficient (18 MB flat) and throughput scales with parallelism. Average genome assembly is ~1.5 MB compressed.
+Downloads are memory-efficient (18 MB flat). Average genome assembly is ~1.5 MB compressed.
 
-### Query by species (single table)
+### Index build cost
 
-| Species | Time | Peak RAM | CPU |
-|---------|------|----------|-----|
-| Escherichia coli | 7.2s | 2.1 GB | 116% |
-| Staphylococcus aureus | 6.5s | 1.5 GB | 118% |
-| Salmonella enterica | 7.9s | 2.2 GB | 134% |
-| Klebsiella pneumoniae | 6.3s | 1.5 GB | 119% |
-| Pseudomonas aeruginosa | 6.3s | 1.4 GB | 119% |
-| Mycobacterium tuberculosis | 6.5s | 1.7 GB | 118% |
-| Streptococcus pneumoniae | 6.4s | 1.6 GB | 118% |
-| Acinetobacter baumannii | 6.2s | 1.4 GB | 118% |
-| Clostridioides difficile | 6.2s | 1.4 GB | 119% |
+| Step | Time |
+|------|------|
+| Read assembly.parquet (3.2M rows) + insert | ~2 min |
+| Read assembly_stats.parquet (2.8M rows) + update | ~1 min |
+| Read checkm2.parquet (2.8M rows) + update | ~1 min |
+| **Total** | **~4 min** |
 
-RAM varies from 1.4-2.2 GB depending on how much of the parquet file is scanned. Rare species with fewer row groups to read use less memory. CPU is ~118% (parquet decompression is the bottleneck, uses ~1.2 cores).
+Index file size: 1.2 GB. Built once, used for all subsequent queries. Rebuild with `atb index --force`.
 
-### Query by genus
+### Disk usage
 
-| Genus | Time | Peak RAM | CPU |
-|-------|------|----------|-----|
-| Salmonella | 7.9s | 2.2 GB | 137% |
-| Streptococcus | 6.8s | 1.9 GB | 118% |
-| Staphylococcus | 6.6s | 1.7 GB | 118% |
-| Escherichia | 7.3s | 2.2 GB | 121% |
-| Mycobacterium | 6.7s | 1.8 GB | 118% |
-
-### Multi-table join cost
-
-| Query | Time | Peak RAM | Tables joined |
-|-------|------|----------|---------------|
-| Species only | 7s | 2.1 GB | assembly |
-| + CheckM2 completeness | 11s | 2.2 GB | + checkm2 |
-| + N50 assembly stats | 11s | 2.1 GB | + assembly_stats |
-| + CheckM2 + N50 | 14s | 2.2 GB | + both |
-| + ENA country filter | 35s | 2.4 GB | + run + ena |
-| All filters combined | 42s | 2.7 GB | all 4 tables |
-
-ENA joins are the most expensive (+25s, +300 MB) because `ena_20250506.parquet` is 856 MB. Use ENA filters only when you need geographic or platform metadata.
+| Component | Size |
+|-----------|------|
+| Core metadata parquet (5 tables) | 540 MB |
+| ENA parquet (5 tables, optional) | 2.5 GB |
+| SQLite index | 1.2 GB |
+| AMR data (per genus, e.g. Escherichia) | ~19 MB |
+| **Typical install (core + index)** | **~1.7 GB** |
 
 ### Notes on species names
 
