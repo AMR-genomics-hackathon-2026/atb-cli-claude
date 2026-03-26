@@ -21,4 +21,10 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", "data directory for downloaded files (default $HOME/.atb/data)")
 
 	RootCmd.AddCommand(newConfigCmd())
+	RootCmd.AddCommand(newQueryCmd())
+	RootCmd.AddCommand(newDownloadCmd())
+	RootCmd.AddCommand(newInfoCmd())
+	RootCmd.AddCommand(newVersionCmd())
+	RootCmd.AddCommand(newFetchCmd())
+	RootCmd.AddCommand(newSummariseCmd())
 }
