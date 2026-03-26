@@ -323,6 +323,64 @@ atb config set download.parallel 8
 
 Config is stored at `~/.config/atb/config.toml`.
 
+## LLM Integration (MCP)
+
+`atb` includes a built-in [Model Context Protocol](https://modelcontextprotocol.io) server, allowing LLMs to query the AllTheBacteria database directly through natural language.
+
+**Supported clients:** Claude Code, Claude Desktop, ChatGPT, OpenAI Codex, Cursor, VS Code Copilot, Windsurf, and any MCP-compatible client.
+
+**Tools exposed:**
+
+| Tool | Description |
+|------|-------------|
+| `atb_query` | Search genomes by species, genus, quality, N50 |
+| `atb_amr` | Query AMR resistance genes by species and drug class |
+| `atb_info` | Get full metadata for a specific sample |
+| `atb_stats` | Database summary statistics |
+| `atb_species_list` | List available species with genome counts |
+
+### Setup
+
+```bash
+# Claude Code
+claude mcp add atb -- atb mcp --data-dir ~/atb/metadata/parquet
+
+# Claude Desktop (add to claude_desktop_config.json)
+{
+  "mcpServers": {
+    "atb": {
+      "command": "atb",
+      "args": ["mcp", "--data-dir", "/path/to/data"]
+    }
+  }
+}
+
+# ChatGPT / OpenAI (add to MCP server config)
+{
+  "mcpServers": {
+    "atb": {
+      "command": "atb",
+      "args": ["mcp", "--data-dir", "/path/to/data"]
+    }
+  }
+}
+
+# Cursor (Settings > MCP Servers > Add)
+# Command: atb mcp --data-dir ~/atb/metadata/parquet
+```
+
+### What you can ask your LLM
+
+Once connected, you can ask natural language questions like:
+
+- "How many Salmonella genomes are in the database?"
+- "Find me 20 high-quality E. coli genomes with N50 > 200000"
+- "What beta-lactam resistance genes does Klebsiella pneumoniae have?"
+- "Show me all metadata for sample SAMD00000355"
+- "What are the top 10 species by genome count?"
+
+The LLM will call the appropriate `atb` tools and interpret the results for you.
+
 ## Output Formats
 
 By default, output is a pretty table when writing to a terminal, and TSV when piped. Override with `--format`:
