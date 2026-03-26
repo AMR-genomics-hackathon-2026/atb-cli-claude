@@ -28,8 +28,8 @@ func newInfoCmd() *cobra.Command {
 				dir = cfg.General.DataDir
 			}
 
-			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				return fmt.Errorf("data directory does not exist: %s\n\nRun 'atb fetch' to download parquet tables.", dir)
+			if err := ensureDatabase(dir); err != nil {
+				return err
 			}
 
 			w := cmd.OutOrStdout()

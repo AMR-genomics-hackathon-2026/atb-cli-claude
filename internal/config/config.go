@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -36,12 +37,29 @@ type DownloadConfig struct {
 	MinFreeSpaceGB int    `toml:"min_free_space_gb"`
 }
 
+// DefaultDataDir returns the OS-standard data directory for ATB.
+// On macOS: ~/Library/Application Support/atb/data
+// On Linux/other: $XDG_DATA_HOME/atb/data or ~/.local/share/atb/data
+func DefaultDataDir() string {
+	switch runtime.GOOS {
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "Library", "Application Support", "atb", "data")
+	default: // linux and others
+		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+			return filepath.Join(xdg, "atb", "data")
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".local", "share", "atb", "data")
+	}
+}
+
 // Default returns a Config populated with sensible defaults.
 func Default() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
 		General: GeneralConfig{
-			DataDir:       filepath.Join(home, "atb", "metadata", "parquet"),
+			DataDir:       DefaultDataDir(),
 			DefaultFormat: "auto",
 		},
 		Fetch: FetchConfig{
@@ -57,10 +75,21 @@ func Default() Config {
 	}
 }
 
-// DefaultPath returns the default config file path (~/.config/atb/config.toml).
+// DefaultPath returns the default config file path.
+// On macOS: ~/Library/Application Support/atb/config.toml
+// On Linux/other: $XDG_CONFIG_HOME/atb/config.toml or ~/.config/atb/config.toml
 func DefaultPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "atb", "config.toml")
+	switch runtime.GOOS {
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "Library", "Application Support", "atb", "config.toml")
+	default:
+		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+			return filepath.Join(xdg, "atb", "config.toml")
+		}
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".config", "atb", "config.toml")
+	}
 }
 
 // Load reads a TOML config from path. If the file does not exist, it returns

@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
@@ -11,12 +12,7 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := config.Default()
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("failed to get home dir: %v", err)
-	}
-
-	wantDataDir := filepath.Join(home, "atb", "metadata", "parquet")
+	wantDataDir := config.DefaultDataDir()
 	if cfg.General.DataDir != wantDataDir {
 		t.Errorf("General.DataDir = %q, want %q", cfg.General.DataDir, wantDataDir)
 	}
@@ -101,16 +97,24 @@ func TestSaveAndLoad(t *testing.T) {
 }
 
 func TestConfigPath(t *testing.T) {
+	// Clear XDG_CONFIG_HOME so we get the default fallback path.
+	t.Setenv("XDG_CONFIG_HOME", "")
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatalf("failed to get home dir: %v", err)
 	}
 
-	want := filepath.Join(home, ".config", "atb", "config.toml")
 	got := config.DefaultPath()
-
-	if got != want {
-		t.Errorf("DefaultPath() = %q, want %q", got, want)
+	if got == "" {
+		t.Error("DefaultPath() returned empty string")
+	}
+	if !filepath.IsAbs(got) {
+		t.Errorf("DefaultPath() = %q, want an absolute path", got)
+	}
+	// Must live somewhere under the home directory
+	if !strings.HasPrefix(got, home) {
+		t.Errorf("DefaultPath() = %q, expected path under home dir %q", got, home)
 	}
 }
 

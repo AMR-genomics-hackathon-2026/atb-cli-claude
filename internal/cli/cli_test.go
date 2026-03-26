@@ -135,6 +135,24 @@ func TestSummariseFromNonExistent(t *testing.T) {
 	}
 }
 
+func TestQueryMissingDatabaseNonInteractive(t *testing.T) {
+	// When stdin is not a terminal (test environment), should get error message
+	dir := t.TempDir()
+	_, stderr, err := runCmd("query", "--data-dir", dir, "--species", "E. coli")
+	if err == nil {
+		t.Error("expected error for missing database")
+	}
+	// Should mention "database" or "fetch" in the error
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	combined := stderr + errMsg
+	if !strings.Contains(strings.ToLower(combined), "database") && !strings.Contains(strings.ToLower(combined), "fetch") {
+		t.Errorf("error should mention database or fetch: %s / %s", errMsg, stderr)
+	}
+}
+
 func TestConfigShow(t *testing.T) {
 	stdout, _, err := runCmd("config", "show")
 	if err != nil {

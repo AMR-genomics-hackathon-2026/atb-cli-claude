@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -46,8 +45,8 @@ Use --by to group results by a specific column (e.g. --by sylph_species).`,
 					dir = cfg.General.DataDir
 				}
 
-				if _, err := os.Stat(dir); os.IsNotExist(err) {
-					return fmt.Errorf("data directory does not exist: %s\n\nRun 'atb fetch' to download parquet tables.", dir)
+				if err := ensureDatabase(dir); err != nil {
+					return err
 				}
 
 				// Run a full query with no filters to get all rows
