@@ -6,6 +6,23 @@ Single binary, no dependencies.
 
 **Supported platforms:** Linux, macOS, Windows (amd64 and arm64)
 
+## Download
+
+Pre-built binaries for all platforms:
+
+| Platform | Architecture | File |
+|----------|-------------|------|
+| Linux | x86_64 (amd64) | `atb-cli_<version>_linux_amd64.tar.gz` |
+| Linux | ARM64 | `atb-cli_<version>_linux_arm64.tar.gz` |
+| macOS | Intel (amd64) | `atb-cli_<version>_darwin_amd64.tar.gz` |
+| macOS | Apple Silicon (arm64) | `atb-cli_<version>_darwin_arm64.tar.gz` |
+| Windows | x86_64 (amd64) | `atb-cli_<version>_windows_amd64.zip` |
+| Windows | ARM64 | `atb-cli_<version>_windows_arm64.zip` |
+
+**Latest release:** [github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/latest](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/latest)
+
+Download the file for your platform, extract, and place the `atb` binary (or `atb.exe` on Windows) somewhere in your `PATH`.
+
 ## Install
 
 **One-line install** (Linux/macOS):
@@ -14,9 +31,7 @@ Single binary, no dependencies.
 curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
 ```
 
-This detects your OS and architecture, downloads the latest release binary, and installs it to `/usr/local/bin`.
-
-**Options:**
+This detects your OS and architecture, downloads the latest release, and installs to `/usr/local/bin`.
 
 ```bash
 # Install a specific version
@@ -26,21 +41,18 @@ ATB_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hac
 ATB_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
 ```
 
-**Other install methods:**
+**Windows:** Download the `.zip` from the [Download](#download) table above, extract, and add `atb.exe` to your PATH.
+
+**Other methods:**
 
 ```bash
-# Go install
+# Go install (requires Go 1.23+)
 go install github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest
 
 # From source
 git clone https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude.git
 cd atb-cli-claude
-make build
-./bin/atb --help
-
-# Manual download
-# Visit https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases
-# Download the archive for your platform, extract, and move `atb` to your PATH
+make build    # binary at ./bin/atb
 ```
 
 ## Quick Start
