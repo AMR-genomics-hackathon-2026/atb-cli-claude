@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/fetch"
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 )
 
 func newFetchCmd() *cobra.Command {
@@ -145,6 +146,15 @@ Use --tables to specify exact tables by name.`,
 			}
 
 			fmt.Fprintf(os.Stderr, "All tables downloaded successfully.\n")
+
+			// Auto-build the SQLite index after a successful fetch.
+			fmt.Fprintf(os.Stderr, "Building query index...\n")
+			stderrLog := func(format string, args ...any) {
+				fmt.Fprintf(os.Stderr, format+"\n", args...)
+			}
+			if err := index.Build(dir, stderrLog); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: index build failed: %v\n", err)
+			}
 			return nil
 		},
 	}
