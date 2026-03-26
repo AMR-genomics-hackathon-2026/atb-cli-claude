@@ -2,20 +2,53 @@
 
 A command-line tool for querying the [AllTheBacteria](https://osf.io/xv7q9/) genomics database (~3.2M bacterial genomes) and downloading genome assemblies.
 
-Single binary, no dependencies. Runs on Linux and macOS (amd64/arm64).
+Single binary, no dependencies. Runs on Linux, macOS, and Windows (amd64/arm64).
+
+## Install
+
+**One-line install** (Linux/macOS):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+```
+
+This detects your OS and architecture, downloads the latest release binary, and installs it to `/usr/local/bin`.
+
+**Options:**
+
+```bash
+# Install a specific version
+ATB_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+
+# Install to a custom directory
+ATB_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+```
+
+**Other install methods:**
+
+```bash
+# Go install
+go install github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest
+
+# From source
+git clone https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude.git
+cd atb-cli-claude
+make build
+./bin/atb --help
+
+# Manual download
+# Visit https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases
+# Download the archive for your platform, extract, and move `atb` to your PATH
+```
 
 ## Quick Start
 
 ```bash
-# 1. Build (or download a release binary)
-make build
+# 1. Download the database (~540 MB core tables)
+atb fetch
 
-# 2. Point to your parquet database
-./bin/atb config init
-./bin/atb config set general.data_dir ~/atb/metadata/parquet
-
-# 3. Query
-./bin/atb query --species "Escherichia coli" --hq-only --limit 10
+# 2. Query
+atb query --species "Escherichia coli" --hq-only --limit 10
 ```
 
 If you don't have the parquet files yet:
