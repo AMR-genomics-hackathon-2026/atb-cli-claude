@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -165,26 +166,56 @@ func Apply(asset *Asset) error {
 		return fmt.Errorf("resolve binary path: %w", err)
 	}
 
-	// Atomic replace: rename new over old
 	if err := os.Chmod(binaryPath, 0o755); err != nil {
 		return fmt.Errorf("chmod: %w", err)
 	}
 
-	// On Windows, can't replace a running binary directly.
-	// Move old binary aside first.
+	// Check if we can write to the target directory
+	if needsElevation(execPath) {
+		return installWithSudo(binaryPath, execPath)
+	}
+
+	return installDirect(binaryPath, execPath)
+}
+
+func needsElevation(path string) bool {
+	if runtime.GOOS == "windows" {
+		return false // Windows handles permissions differently
+	}
+	dir := filepath.Dir(path)
+	testFile := filepath.Join(dir, ".atb-write-test")
+	f, err := os.Create(testFile)
+	if err != nil {
+		return true
+	}
+	f.Close()
+	os.Remove(testFile)
+	return false
+}
+
+func installDirect(binaryPath, execPath string) error {
 	backupPath := execPath + ".old"
-	os.Remove(backupPath) // clean up any previous backup
+	os.Remove(backupPath)
 	if err := os.Rename(execPath, backupPath); err != nil {
 		return fmt.Errorf("backup current binary: %w", err)
 	}
-
 	if err := copyFile(binaryPath, execPath); err != nil {
-		// Restore backup on failure
 		os.Rename(backupPath, execPath)
 		return fmt.Errorf("install new binary: %w", err)
 	}
-
 	os.Remove(backupPath)
+	return nil
+}
+
+func installWithSudo(binaryPath, execPath string) error {
+	fmt.Fprintf(os.Stderr, "  Installing to %s requires elevated permissions.\n", filepath.Dir(execPath))
+	cmd := exec.Command("sudo", "cp", binaryPath, execPath)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("sudo install failed: %w\n\nYou can also install manually:\n  sudo cp %s %s", err, binaryPath, execPath)
+	}
 	return nil
 }
 
