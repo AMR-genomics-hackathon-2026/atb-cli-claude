@@ -239,6 +239,122 @@ func (d *DB) Query(params QueryParams) ([]map[string]string, error) {
 	return results, rows.Err()
 }
 
+// SpeciesCount holds a species name and its sample count.
+type SpeciesCount struct {
+	Species string
+	Count   int
+}
+
+// SpeciesList returns species sorted by descending sample count.
+func (d *DB) SpeciesList(limit int) ([]SpeciesCount, error) {
+	q := `SELECT sylph_species, COUNT(*) as cnt FROM samples WHERE sylph_species != '' AND sylph_species != 'unknown' GROUP BY sylph_species ORDER BY cnt DESC`
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := d.db.Query(q)
+	if err != nil {
+		return nil, fmt.Errorf("species list query: %w", err)
+	}
+	defer rows.Close()
+
+	var results []SpeciesCount
+	for rows.Next() {
+		var sc SpeciesCount
+		if err := rows.Scan(&sc.Species, &sc.Count); err != nil {
+			return nil, fmt.Errorf("scanning species row: %w", err)
+		}
+		results = append(results, sc)
+	}
+	return results, rows.Err()
+}
+
+// Stats holds summary statistics for the database.
+type Stats struct {
+	Total      int
+	HQCount    int
+	TopSpecies []SpeciesCount
+	Datasets   map[string]int
+}
+
+// QueryStats returns summary statistics, optionally filtered by species and/or HQ.
+func (d *DB) QueryStats(species string, hqOnly bool) (Stats, error) {
+	var conditions []string
+	var args []any
+
+	if species != "" {
+		conditions = append(conditions, "lower(sylph_species) = lower(?)")
+		args = append(args, species)
+	}
+	if hqOnly {
+		conditions = append(conditions, "hq_filter = 'PASS'")
+	}
+
+	where := ""
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	var stats Stats
+
+	// Total count
+	if err := d.db.QueryRow("SELECT COUNT(*) FROM samples"+where, args...).Scan(&stats.Total); err != nil {
+		return stats, fmt.Errorf("counting total: %w", err)
+	}
+
+	// HQ count
+	hqWhere := where
+	hqArgs := append([]any{}, args...)
+	if !hqOnly {
+		if hqWhere == "" {
+			hqWhere = " WHERE hq_filter = 'PASS'"
+		} else {
+			hqWhere += " AND hq_filter = 'PASS'"
+		}
+	}
+	if err := d.db.QueryRow("SELECT COUNT(*) FROM samples"+hqWhere, hqArgs...).Scan(&stats.HQCount); err != nil {
+		return stats, fmt.Errorf("counting hq: %w", err)
+	}
+
+	// Top species (up to 10)
+	speciesQ := `SELECT sylph_species, COUNT(*) as cnt FROM samples` + where + ` AND sylph_species != '' AND sylph_species != 'unknown' GROUP BY sylph_species ORDER BY cnt DESC LIMIT 10`
+	if where == "" {
+		speciesQ = `SELECT sylph_species, COUNT(*) as cnt FROM samples WHERE sylph_species != '' AND sylph_species != 'unknown' GROUP BY sylph_species ORDER BY cnt DESC LIMIT 10`
+	}
+	rows, err := d.db.Query(speciesQ, args...)
+	if err != nil {
+		return stats, fmt.Errorf("top species query: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var sc SpeciesCount
+		if err := rows.Scan(&sc.Species, &sc.Count); err != nil {
+			return stats, fmt.Errorf("scanning species: %w", err)
+		}
+		stats.TopSpecies = append(stats.TopSpecies, sc)
+	}
+	if err := rows.Err(); err != nil {
+		return stats, err
+	}
+
+	// Dataset counts
+	datasetQ := "SELECT dataset, COUNT(*) as cnt FROM samples" + where + " GROUP BY dataset ORDER BY cnt DESC"
+	dRows, err := d.db.Query(datasetQ, args...)
+	if err != nil {
+		return stats, fmt.Errorf("dataset query: %w", err)
+	}
+	defer dRows.Close()
+	stats.Datasets = make(map[string]int)
+	for dRows.Next() {
+		var ds string
+		var cnt int
+		if err := dRows.Scan(&ds, &cnt); err != nil {
+			return stats, fmt.Errorf("scanning dataset: %w", err)
+		}
+		stats.Datasets[ds] = cnt
+	}
+	return stats, dRows.Err()
+}
+
 // scanRow scans a single *sql.Row into a map using the given column names.
 func scanRow(row *sql.Row, cols []string) (map[string]string, error) {
 	ptrs := makeScanPtrs(len(cols))
