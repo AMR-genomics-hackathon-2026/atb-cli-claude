@@ -1,4 +1,8 @@
 bin/
+dist/
+*.exe
 *.test
 *.out
 testdata/fixtures/*.parquet
+.env
+.env.local
