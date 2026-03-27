@@ -4,10 +4,9 @@ Note from jane: would be good to be able to specify a filter here (eg high quali
 Get me all the MLST for species X
 
 https://github.com/immem-hackathon-2025/atb-amr-shiny 
+AMR parquet files is in https://github.com/immem-hackathon-2025/atb-amr-shiny/tree/main/data/amr_by_genus
 
 Other ideas:
-
-
 Get me all the ST131 E coli
 Get me 100 evenly spread Salmonella
 Get me this genome
@@ -37,4 +36,4 @@ atb-cli
 Goals:
 Make queries reproducible.
 The query process should be well documented.
-data location: ~/atb/metadata/parquet
+data schema location: ~/atb/metadata/parquet. This parquet files contain metadata of the data/genome as well as ulr
