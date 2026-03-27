@@ -261,10 +261,8 @@ func buildSQL(f Filters) (string, []any) {
 		args = append(args, "%"+strings.ToUpper(f.Class)+"%")
 	}
 	if f.GenePattern != "" {
-		sqlPattern := strings.ReplaceAll(f.GenePattern, "%", "%%SQL%%")
-		sqlPattern = strings.ToLower(sqlPattern)
-		sqlPattern = strings.ReplaceAll(sqlPattern, "%%SQL%%", "%")
-		clauses = append(clauses, "LOWER(gene_symbol) LIKE ?")
+		sqlPattern := convertToSQLLike(f.GenePattern)
+		clauses = append(clauses, "LOWER(gene_symbol) LIKE ? ESCAPE '\\'")
 		args = append(args, sqlPattern)
 	}
 	if f.MinCoverage > 0 {
@@ -290,6 +288,24 @@ func buildSQL(f Filters) (string, []any) {
 		q += fmt.Sprintf(" LIMIT %d", f.Limit)
 	}
 	return q, args
+}
+
+// convertToSQLLike converts our % wildcard pattern to a SQL LIKE pattern.
+// Escapes SQL special chars (_ and %) in the literal parts, preserving our % as SQL %.
+func convertToSQLLike(pattern string) string {
+	pattern = strings.ToLower(pattern)
+	var b strings.Builder
+	for _, ch := range pattern {
+		switch ch {
+		case '%':
+			b.WriteRune('%') // our wildcard → SQL wildcard
+		case '_':
+			b.WriteString("\\_") // escape SQL single-char wildcard
+		default:
+			b.WriteRune(ch)
+		}
+	}
+	return b.String()
 }
 
 func workers() int {

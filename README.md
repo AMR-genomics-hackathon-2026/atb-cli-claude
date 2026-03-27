@@ -492,77 +492,20 @@ atb query --species "Escherichia coli" --limit 5 --format table   # pretty table
 
 ## Performance
 
-Benchmarked on Linux x86_64, 8 cores, 15 GB RAM. Database: 3,227,665 genomes.
+Queries are effectively instant after `atb fetch` builds the indexes.
 
-Run `bash benchmark.sh` to reproduce on your machine.
+| Query type | Time | Peak RAM |
+|------------|------|----------|
+| Metadata query (`atb query --species ... --limit 100`) | <10ms | 15 MB |
+| Sample info (`atb info SAMN...`) | <10ms | 14 MB |
+| AMR query (`atb amr --species ... --limit 100`) | <10ms | 0.1 MB |
+| AMR query (`atb amr --species ... --class ...`) | <10ms | 0.1 MB |
+| AMR cross-genus gene search (`atb amr --gene ... --limit 100`) | ~2ms | 3 MB |
+| Genome download (50 files, parallel=4) | 3.8s | 18 MB |
 
-### With SQLite index (default after `atb fetch`)
+Post-fetch index build: ~8-11 minutes (one-time). Disk: ~3.5 GB typical install.
 
-The index is built automatically during `atb fetch` (one-time cost: ~4 minutes, produces a 1.2 GB SQLite file). All subsequent queries use the index.
-
-| Operation | Time | Peak RAM |
-|-----------|------|----------|
-| Single sample info (`atb info`) | **<10ms** | **14 MB** |
-| Species query (E. coli, HQ, limit 100) | **<10ms** | **15 MB** |
-| Species query (S. aureus, HQ, limit 100) | **<10ms** | **17 MB** |
-| Species + completeness + N50 filter | **<10ms** | **15 MB** |
-
-Queries are effectively instant. The SQLite index pre-joins assembly, assembly_stats, and checkm2 data into one indexed table, so no parquet scanning is needed.
-
-### Improvement over parquet-only scan
-
-| Operation | Before (parquet) | After (SQLite) | Speedup | RAM reduction |
-|-----------|-----------------|----------------|---------|---------------|
-| Single sample info | 39.5s / 2.2 GB | <10ms / 14 MB | **~4,000x** | **99.4%** |
-| E. coli species query | 7.3s / 2.1 GB | <10ms / 15 MB | **~700x** | **99.3%** |
-| S. aureus species query | 6.4s / 1.5 GB | <10ms / 17 MB | **~600x** | **98.9%** |
-| QC join query | 10.9s / 2.2 GB | <10ms / 15 MB | **~1,000x** | **99.3%** |
-
-### ENA queries (parquet scan, no index)
-
-Queries involving ENA metadata (country, platform, collection date) still use parquet scanning because ENA data is not included in the index (it would add 856 MB and slow index builds significantly).
-
-| Query | Time | Peak RAM |
-|-------|------|----------|
-| Species + country filter | ~35s | 2.4 GB |
-| Species + country + platform + dates | ~42s | 2.7 GB |
-
-### Download (genome FASTA from AWS S3, parallel=4)
-
-| Files | Time | Peak RAM | Total size | Throughput |
-|-------|------|----------|------------|------------|
-| 10 | 2.2s | 18 MB | 16 MB | 7 MB/s |
-| 20 | 2.5s | 18 MB | 31 MB | 13 MB/s |
-| 30 | 3.1s | 18 MB | 46 MB | 15 MB/s |
-| 40 | 3.2s | 18 MB | 62 MB | 20 MB/s |
-| 50 | 3.8s | 18 MB | 77 MB | 21 MB/s |
-
-Downloads are memory-efficient (18 MB flat). Average genome assembly is ~1.5 MB compressed.
-
-### Post-fetch build cost
-
-After downloading, `atb fetch` automatically builds AMR partitions and the query index:
-
-| Step | Time |
-|------|------|
-| AMR genus partitioning (25.6M rows) | ~1-2 min |
-| Read assembly.parquet (3.2M rows) + insert | ~2 min |
-| Merge assembly_stats (2.8M rows) | ~1 min |
-| Merge checkm2 (2.8M rows) | ~1 min |
-| Merge mlst (2.4M rows) | ~30s |
-| **Total** | **~5-6 min** |
-
-Index file size: 1.2 GB. Built once, used for all subsequent queries. Rebuild with `atb fetch --force`.
-
-### Disk usage
-
-| Component | Size |
-|-----------|------|
-| Core metadata parquet (7 tables) | 700 MB |
-| ENA parquet (5 tables, optional) | 2.5 GB |
-| SQLite index | 1.2 GB |
-| AMR genus partitions (auto-built) | ~81 MB |
-| **Typical install (core + index + partitions)** | **~2 GB** |
+Full benchmark details, methodology, and comparisons across query tiers: **[docs/BENCHMARKS.md](docs/BENCHMARKS.md)**
 
 ### Notes on species names
 

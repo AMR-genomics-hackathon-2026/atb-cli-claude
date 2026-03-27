@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	parquetgo "github.com/parquet-go/parquet-go"
@@ -12,9 +13,6 @@ import (
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
 
-// setupBenchData generates a synthetic monolithic parquet file, partitions it,
-// and returns the data directory. The genus distribution mimics real data:
-// one large genus (60%), one medium (25%), several small (15% total).
 func setupBenchData(b *testing.B, nRows int) string {
 	b.Helper()
 	dir := b.TempDir()
@@ -26,7 +24,6 @@ func setupBenchData(b *testing.B, nRows int) string {
 
 	w := parquetgo.NewGenericWriter[pq.AMRRow](f)
 
-	// Distribution: Escherichia 60%, Salmonella 25%, rest 15% across 3 small genera
 	type genDist struct {
 		genus string
 		pct   float64
@@ -39,6 +36,9 @@ func setupBenchData(b *testing.B, nRows int) string {
 		{"Pseudomonas", 0.04},
 	}
 
+	classes := []string{"BETA-LACTAM", "AMINOGLYCOSIDE", "EFFLUX", "TETRACYCLINE", "CARBAPENEM"}
+	types := []string{"AMR", "STRESS", "VIRULENCE"}
+
 	buf := make([]pq.AMRRow, 0, 1000)
 	var gi int
 	for _, d := range dist {
@@ -48,12 +48,12 @@ func setupBenchData(b *testing.B, nRows int) string {
 				Name:           fmt.Sprintf("SAMN%08d", gi),
 				GeneSymbol:     fmt.Sprintf("gene_%d", gi%200),
 				HierarchyNode:  "node",
-				ElementType:    "AMR",
+				ElementType:    types[gi%len(types)],
 				ElementSubtype: "subtype",
-				Coverage:       99.0,
-				Identity:       99.5,
+				Coverage:       90.0 + float64(gi%100)/10.0,
+				Identity:       95.0 + float64(gi%50)/10.0,
 				Method:         "BLAST",
-				Class:          "BETA-LACTAM",
+				Class:          classes[gi%len(classes)],
 				Subclass:       "sub",
 				Species:        d.genus + " sp.",
 				Genus:          d.genus,
@@ -80,108 +80,281 @@ func setupBenchData(b *testing.B, nRows int) string {
 		b.Fatal(err)
 	}
 
-	if err := amr.BuildPartitions(dir, nil); err != nil {
-		b.Fatalf("BuildPartitions: %v", err)
-	}
-
 	return dir
 }
 
-// BenchmarkQuery_Monolithic_500K queries the monolithic file (no partitions).
-func BenchmarkQuery_Monolithic_500K(b *testing.B) {
-	dir := setupBenchData(b, 500_000)
-	// Remove partitions so Query falls back to monolithic
-	os.RemoveAll(filepath.Join(dir, amr.PartitionDir))
+func setupMonolithic(b *testing.B, nRows int) string {
+	return setupBenchData(b, nRows)
+}
 
+func setupParquetOnly(b *testing.B, nRows int) string {
+	dir := setupBenchData(b, nRows)
+	if err := amr.BuildPartitions(dir, nil); err != nil {
+		b.Fatal(err)
+	}
+	// Remove SQLite files, keep only parquet partitions
+	entries, _ := os.ReadDir(filepath.Join(dir, amr.PartitionDir))
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".sqlite") {
+			os.Remove(filepath.Join(dir, amr.PartitionDir, e.Name()))
+		}
+	}
+	return dir
+}
+
+func setupWithSQLite(b *testing.B, nRows int) string {
+	dir := setupBenchData(b, nRows)
+	if err := amr.BuildPartitions(dir, nil); err != nil {
+		b.Fatal(err)
+	}
+	return dir
+}
+
+// --- 500K: Full genus scan (no limit) ---
+
+func BenchmarkQuery_Monolithic_500K_FullScan(b *testing.B) {
+	dir := setupMonolithic(b, 500_000)
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
 		if err != nil {
 			b.Fatal(err)
 		}
-		if len(results) == 0 {
+		if len(r) == 0 {
 			b.Fatal("no results")
 		}
 	}
 }
 
-// BenchmarkQuery_Partitioned_500K queries the genus partition file.
-func BenchmarkQuery_Partitioned_500K(b *testing.B) {
-	dir := setupBenchData(b, 500_000)
-
+func BenchmarkQuery_Parquet_500K_FullScan(b *testing.B) {
+	dir := setupParquetOnly(b, 500_000)
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
 		if err != nil {
 			b.Fatal(err)
 		}
-		if len(results) == 0 {
+		if len(r) == 0 {
 			b.Fatal("no results")
 		}
 	}
 }
 
-// BenchmarkQuery_Monolithic_500K_Limit100 queries monolithic with limit.
+func BenchmarkQuery_SQLite_500K_FullScan(b *testing.B) {
+	dir := setupWithSQLite(b, 500_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+// --- 500K: Genus + Limit 100 ---
+
 func BenchmarkQuery_Monolithic_500K_Limit100(b *testing.B) {
-	dir := setupBenchData(b, 500_000)
-	os.RemoveAll(filepath.Join(dir, amr.PartitionDir))
-
+	dir := setupMonolithic(b, 500_000)
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
 		if err != nil {
 			b.Fatal(err)
 		}
-		if len(results) != 100 {
-			b.Fatalf("expected 100, got %d", len(results))
+		if len(r) != 100 {
+			b.Fatalf("got %d", len(r))
 		}
 	}
 }
 
-// BenchmarkQuery_Partitioned_500K_Limit100 queries partition with limit.
-func BenchmarkQuery_Partitioned_500K_Limit100(b *testing.B) {
-	dir := setupBenchData(b, 500_000)
-
+func BenchmarkQuery_Parquet_500K_Limit100(b *testing.B) {
+	dir := setupParquetOnly(b, 500_000)
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
 		if err != nil {
 			b.Fatal(err)
 		}
-		if len(results) != 100 {
-			b.Fatalf("expected 100, got %d", len(results))
+		if len(r) != 100 {
+			b.Fatalf("got %d", len(r))
 		}
 	}
 }
 
-// BenchmarkQuery_Monolithic_1M queries 1M rows from monolithic file.
-func BenchmarkQuery_Monolithic_1M(b *testing.B) {
-	dir := setupBenchData(b, 1_000_000)
-	os.RemoveAll(filepath.Join(dir, amr.PartitionDir))
-
+func BenchmarkQuery_SQLite_500K_Limit100(b *testing.B) {
+	dir := setupWithSQLite(b, 500_000)
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
 		if err != nil {
 			b.Fatal(err)
 		}
-		if len(results) == 0 {
+		if len(r) != 100 {
+			b.Fatalf("got %d", len(r))
+		}
+	}
+}
+
+// --- 500K: Class filter ---
+
+func BenchmarkQuery_Monolithic_500K_ClassFilter(b *testing.B) {
+	dir := setupMonolithic(b, 500_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Class: "BETA-LACTAM", Limit: 100})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
 			b.Fatal("no results")
 		}
 	}
 }
 
-// BenchmarkQuery_Partitioned_1M queries 1M rows from partition file.
-func BenchmarkQuery_Partitioned_1M(b *testing.B) {
-	dir := setupBenchData(b, 1_000_000)
-
+func BenchmarkQuery_SQLite_500K_ClassFilter(b *testing.B) {
+	dir := setupWithSQLite(b, 500_000)
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Class: "BETA-LACTAM", Limit: 100})
 		if err != nil {
 			b.Fatal(err)
 		}
-		if len(results) == 0 {
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+// --- 500K: Gene pattern filter ---
+
+func BenchmarkQuery_Monolithic_500K_GenePattern(b *testing.B) {
+	dir := setupMonolithic(b, 500_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, GenePattern: "gene_10%", Limit: 100})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+func BenchmarkQuery_SQLite_500K_GenePattern(b *testing.B) {
+	dir := setupWithSQLite(b, 500_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, GenePattern: "gene_10%", Limit: 100})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+// --- 1M: Full scan and limit ---
+
+func BenchmarkQuery_Monolithic_1M_FullScan(b *testing.B) {
+	dir := setupMonolithic(b, 1_000_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+func BenchmarkQuery_Parquet_1M_FullScan(b *testing.B) {
+	dir := setupParquetOnly(b, 1_000_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+func BenchmarkQuery_SQLite_1M_FullScan(b *testing.B) {
+	dir := setupWithSQLite(b, 1_000_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+func BenchmarkQuery_Monolithic_1M_Limit100(b *testing.B) {
+	dir := setupMonolithic(b, 1_000_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) != 100 {
+			b.Fatalf("got %d", len(r))
+		}
+	}
+}
+
+func BenchmarkQuery_SQLite_1M_Limit100(b *testing.B) {
+	dir := setupWithSQLite(b, 1_000_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) != 100 {
+			b.Fatalf("got %d", len(r))
+		}
+	}
+}
+
+// --- 500K: Multi-genus ---
+
+func BenchmarkQuery_Monolithic_500K_MultiGenus(b *testing.B) {
+	dir := setupMonolithic(b, 500_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia", "Salmonella"}, Limit: 100})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
+			b.Fatal("no results")
+		}
+	}
+}
+
+func BenchmarkQuery_SQLite_500K_MultiGenus(b *testing.B) {
+	dir := setupWithSQLite(b, 500_000)
+	b.ResetTimer()
+	for b.Loop() {
+		r, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia", "Salmonella"}, Limit: 100})
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(r) == 0 {
 			b.Fatal("no results")
 		}
 	}
