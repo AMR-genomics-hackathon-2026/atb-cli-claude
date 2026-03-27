@@ -459,10 +459,10 @@ The LLM will call the appropriate `atb` tools and interpret the results for you.
 By default, output is a pretty table when writing to a terminal, and TSV when piped. Override with `--format`:
 
 ```bash
-atb query --species "E. coli" --limit 5 --format tsv     # tab-separated
-atb query --species "E. coli" --limit 5 --format csv     # comma-separated
-atb query --species "E. coli" --limit 5 --format json    # JSON array
-atb query --species "E. coli" --limit 5 --format table   # pretty table
+atb query --species "Escherichia coli" --limit 5 --format tsv     # tab-separated
+atb query --species "Escherichia coli" --limit 5 --format csv     # comma-separated
+atb query --species "Escherichia coli" --limit 5 --format json    # JSON array
+atb query --species "Escherichia coli" --limit 5 --format table   # pretty table
 ```
 
 ## Available Columns
