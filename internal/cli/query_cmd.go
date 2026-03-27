@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -342,14 +343,27 @@ func parseCSVURLs(path string) ([]string, error) {
 	}
 	defer f.Close()
 
-	// Detect separator from extension
+	// Read first line to detect separator
+	scanner := bufio.NewScanner(f)
+	if !scanner.Scan() {
+		return nil, fmt.Errorf("empty file")
+	}
+	firstLine := scanner.Text()
+
+	// Auto-detect: if the first line contains tabs, use tab; otherwise comma
 	sep := ','
-	if strings.HasSuffix(strings.ToLower(path), ".tsv") {
+	if strings.Contains(firstLine, "\t") {
 		sep = '\t'
+	}
+
+	// Re-read from start
+	if _, err := f.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("seeking file: %w", err)
 	}
 
 	r := csv.NewReader(f)
 	r.Comma = rune(sep)
+	r.LazyQuotes = true
 
 	header, err := r.Read()
 	if err != nil {
