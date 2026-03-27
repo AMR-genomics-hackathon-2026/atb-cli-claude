@@ -163,3 +163,20 @@ func TestConfigShow(t *testing.T) {
 		t.Errorf("expected 'data_dir' in config show output, got:\n%s", stdout)
 	}
 }
+
+func TestMLSTHelp(t *testing.T) {
+	stdout, _, err := runCmd("mlst", "--help")
+	if err != nil {
+		t.Fatalf("mlst --help failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "MLST") {
+		t.Errorf("expected 'MLST' in mlst --help output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "--species") {
+		t.Errorf("expected '--species' flag in mlst --help output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "--st") {
+		t.Errorf("expected '--st' flag in mlst --help output, got:\n%s", stdout)
+	}
+}

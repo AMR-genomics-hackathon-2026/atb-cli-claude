@@ -75,6 +75,18 @@ func newInfoCmd() *cobra.Command {
 							fmt.Fprintf(w, "  gc_content:           %s\n", row["GC_Content"])
 							fmt.Fprintln(w)
 						}
+
+						if row["mlst_scheme"] != "" && row["mlst_scheme"] != "-" {
+							fmt.Fprintln(w, "=== MLST ===")
+							fmt.Fprintf(w, "  scheme:    %s\n", row["mlst_scheme"])
+							fmt.Fprintf(w, "  ST:        %s\n", row["mlst_st"])
+							fmt.Fprintf(w, "  status:    %s\n", row["mlst_status"])
+							fmt.Fprintf(w, "  score:     %s\n", row["mlst_score"])
+							if row["mlst_alleles"] != "" && row["mlst_alleles"] != "-" {
+								fmt.Fprintf(w, "  alleles:   %s\n", row["mlst_alleles"])
+							}
+							fmt.Fprintln(w)
+						}
 						return nil
 					}
 				}
@@ -174,6 +186,30 @@ func newInfoCmd() *cobra.Command {
 				}
 			} else {
 				fmt.Fprintln(w, "ENA table not downloaded. Run 'atb fetch --all' to get all tables.")
+			}
+
+			// MLST (optional)
+			mlstPath := filepath.Join(dir, "mlst.parquet")
+			if _, err := os.Stat(mlstPath); err == nil {
+				rows, err := pq.ReadFiltered[pq.MLSTRow](mlstPath, func(r pq.MLSTRow) bool {
+					return r.Sample == accession
+				})
+				if err != nil {
+					fmt.Fprintf(w, "mlst: error reading: %v\n", err)
+				} else if len(rows) > 0 {
+					m := rows[0]
+					if m.Scheme != "" && m.Scheme != "-" {
+						fmt.Fprintln(w, "=== MLST ===")
+						fmt.Fprintf(w, "  scheme:    %s\n", m.Scheme)
+						fmt.Fprintf(w, "  ST:        %s\n", m.ST)
+						fmt.Fprintf(w, "  status:    %s\n", m.Status)
+						fmt.Fprintf(w, "  score:     %d\n", m.Score)
+						if m.Alleles != "" && m.Alleles != "-" {
+							fmt.Fprintf(w, "  alleles:   %s\n", m.Alleles)
+						}
+						fmt.Fprintln(w)
+					}
+				}
 			}
 
 			if !found {
