@@ -6,7 +6,7 @@ set -euo pipefail
 
 REPO="AMR-genomics-hackathon-2026/atb-cli-claude"
 BINARY="atb"
-INSTALL_DIR="${ATB_INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${ATB_INSTALL_DIR:-${HOME}/.local/bin}"
 
 info()  { printf "\033[1;34m==>\033[0m %s\n" "$1"; }
 error() { printf "\033[1;31merror:\033[0m %s\n" "$1" >&2; exit 1; }
@@ -89,18 +89,28 @@ main() {
     fi
 
     # Install
-    if [ -w "$INSTALL_DIR" ]; then
-        mv "${tmp}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-    else
-        info "Installing to ${INSTALL_DIR} (requires sudo)"
-        sudo mv "${tmp}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-    fi
+    mkdir -p "$INSTALL_DIR"
+    rm -f "${INSTALL_DIR}/${BINARY}"
+    mv "${tmp}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
     chmod +x "${INSTALL_DIR}/${BINARY}"
 
     info "Installed ${BINARY} ${version} to ${INSTALL_DIR}/${BINARY}"
     echo ""
     "${INSTALL_DIR}/${BINARY}" version 2>/dev/null || true
     echo ""
+
+    # Check if INSTALL_DIR is in PATH
+    case ":${PATH}:" in
+        *":${INSTALL_DIR}:"*) ;;
+        *)
+            printf "\033[1;33mwarning:\033[0m %s is not in your PATH.\n" "$INSTALL_DIR"
+            echo "  Add it by running:"
+            echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
+            echo "  Or add that line to your ~/.bashrc or ~/.zshrc"
+            echo ""
+            ;;
+    esac
+
     info "Run 'atb fetch' to download the database, then 'atb query --help' to get started."
 }
 
