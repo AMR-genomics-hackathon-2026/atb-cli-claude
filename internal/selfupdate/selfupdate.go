@@ -209,12 +209,19 @@ func installDirect(binaryPath, execPath string) error {
 
 func installWithSudo(binaryPath, execPath string) error {
 	fmt.Fprintf(os.Stderr, "  Installing to %s requires elevated permissions.\n", filepath.Dir(execPath))
-	cmd := exec.Command("sudo", "cp", binaryPath, execPath)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sudo install failed: %w\n\nYou can also install manually:\n  sudo cp %s %s", err, binaryPath, execPath)
+	// Remove first to avoid "Text file busy" when the binary is running
+	rmCmd := exec.Command("sudo", "rm", "-f", execPath)
+	rmCmd.Stdin = os.Stdin
+	rmCmd.Stdout = os.Stderr
+	rmCmd.Stderr = os.Stderr
+	_ = rmCmd.Run() // ignore error if file doesn't exist
+
+	cpCmd := exec.Command("sudo", "cp", binaryPath, execPath)
+	cpCmd.Stdin = os.Stdin
+	cpCmd.Stdout = os.Stderr
+	cpCmd.Stderr = os.Stderr
+	if err := cpCmd.Run(); err != nil {
+		return fmt.Errorf("sudo install failed: %w\n\nYou can also install manually:\n  sudo rm -f %s && sudo cp %s %s", err, execPath, binaryPath, execPath)
 	}
 	return nil
 }
