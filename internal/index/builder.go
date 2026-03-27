@@ -33,11 +33,17 @@ CREATE TABLE samples (
     completeness REAL,
     contamination REAL,
     genome_size REAL,
-    gc_content REAL
+    gc_content REAL,
+    mlst_scheme TEXT,
+    mlst_st TEXT,
+    mlst_status TEXT,
+    mlst_score INTEGER,
+    mlst_alleles TEXT
 );
 CREATE INDEX idx_species ON samples(sylph_species);
 CREATE INDEX idx_hq ON samples(hq_filter);
 CREATE INDEX idx_dataset ON samples(dataset);
+CREATE INDEX idx_mlst_st ON samples(mlst_st);
 `
 
 const insertAssembly = `
@@ -73,6 +79,16 @@ UPDATE samples SET
     contamination = ?,
     genome_size = ?,
     gc_content = ?
+WHERE sample_accession = ?
+`
+
+const updateMLST = `
+UPDATE samples SET
+    mlst_scheme = ?,
+    mlst_st = ?,
+    mlst_status = ?,
+    mlst_score = ?,
+    mlst_alleles = ?
 WHERE sample_accession = ?
 `
 
@@ -153,6 +169,25 @@ func Build(dataDir string, logf func(string, ...any)) error {
 			return err
 		}); err != nil {
 			return fmt.Errorf("updating checkm2: %w", err)
+		}
+	}
+
+	// Step 4: update mlst.
+	mlstPath := filepath.Join(dataDir, "mlst.parquet")
+	if _, statErr := os.Stat(mlstPath); statErr == nil {
+		logf("reading mlst.parquet...")
+		mlstRows, err := pq.ReadAll[pq.MLSTRow](mlstPath)
+		if err != nil {
+			return fmt.Errorf("reading mlst: %w", err)
+		}
+		logf("updating %d mlst rows...", len(mlstRows))
+
+		if err := insertInBatches(db, updateMLST, len(mlstRows), func(stmt *sql.Stmt, i int) error {
+			m := mlstRows[i]
+			_, err := stmt.Exec(m.Scheme, m.ST, m.Status, m.Score, m.Alleles, m.Sample)
+			return err
+		}); err != nil {
+			return fmt.Errorf("updating mlst: %w", err)
 		}
 	}
 

@@ -12,7 +12,7 @@ func buildTestIndex(t *testing.T) *DB {
 
 	dir := t.TempDir()
 	fixtures := "../../testdata/fixtures"
-	for _, name := range []string{"assembly.parquet", "assembly_stats.parquet", "checkm2.parquet"} {
+	for _, name := range []string{"assembly.parquet", "assembly_stats.parquet", "checkm2.parquet", "mlst.parquet"} {
 		data, err := os.ReadFile(filepath.Join(fixtures, name))
 		if err != nil {
 			t.Fatalf("reading fixture %s: %v", name, err)
@@ -119,5 +119,105 @@ func TestInfoRowNotFound(t *testing.T) {
 	_, err := db.InfoRow("NONEXISTENT_SAMPLE")
 	if err == nil {
 		t.Fatal("expected error for nonexistent sample, got nil")
+	}
+}
+
+func TestQueryMLSTColumns(t *testing.T) {
+	db := buildTestIndex(t)
+
+	rows, err := db.Query(QueryParams{
+		Species: "Escherichia coli",
+		Columns: []string{"sample_accession", "mlst_scheme", "mlst_st", "mlst_status", "mlst_score"},
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(rows) != 5 {
+		t.Fatalf("expected 5 E. coli rows, got %d", len(rows))
+	}
+	for _, r := range rows {
+		if r["mlst_scheme"] != "ecoli_achtman_4" {
+			t.Errorf("sample %s: expected mlst_scheme=ecoli_achtman_4, got %q", r["sample_accession"], r["mlst_scheme"])
+		}
+		if r["mlst_st"] == "" {
+			t.Errorf("sample %s: mlst_st is empty", r["sample_accession"])
+		}
+		if r["mlst_status"] == "" {
+			t.Errorf("sample %s: mlst_status is empty", r["sample_accession"])
+		}
+	}
+}
+
+func TestQueryMLSTFilterByST(t *testing.T) {
+	db := buildTestIndex(t)
+
+	// ST131 E. coli: SAMN1, SAMN2, SAMN19 (3 samples)
+	rows, err := db.Query(QueryParams{SequenceType: "131"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Errorf("expected 3 ST131 rows, got %d", len(rows))
+	}
+	for _, r := range rows {
+		if r["mlst_st"] != "131" {
+			t.Errorf("expected mlst_st=131, got %q", r["mlst_st"])
+		}
+	}
+}
+
+func TestQueryMLSTFilterByScheme(t *testing.T) {
+	db := buildTestIndex(t)
+
+	rows, err := db.Query(QueryParams{Scheme: "salmonella"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	// Salmonella enterica samples: SAMN5, SAMN6, SAMN18 = 3
+	if len(rows) != 3 {
+		t.Errorf("expected 3 salmonella scheme rows, got %d", len(rows))
+	}
+}
+
+func TestQueryMLSTFilterByStatus(t *testing.T) {
+	db := buildTestIndex(t)
+
+	rows, err := db.Query(QueryParams{MLSTStatus: "NONE"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	// NONE: M. tuberculosis (SAMN16, SAMN17) + unknown (SAMN20) = 3
+	if len(rows) != 3 {
+		t.Errorf("expected 3 NONE status rows, got %d", len(rows))
+	}
+}
+
+func TestMLSTForSample(t *testing.T) {
+	db := buildTestIndex(t)
+
+	mlst, err := db.MLSTForSample("SAMN00000001")
+	if err != nil {
+		t.Fatalf("MLSTForSample: %v", err)
+	}
+	if mlst == nil {
+		t.Fatal("expected non-nil MLST result")
+	}
+	if mlst["mlst_scheme"] != "ecoli_achtman_4" {
+		t.Errorf("expected mlst_scheme=ecoli_achtman_4, got %q", mlst["mlst_scheme"])
+	}
+}
+
+func TestMLSTInInfoRow(t *testing.T) {
+	db := buildTestIndex(t)
+
+	row, err := db.InfoRow("SAMN00000001")
+	if err != nil {
+		t.Fatalf("InfoRow: %v", err)
+	}
+	if row["mlst_scheme"] != "ecoli_achtman_4" {
+		t.Errorf("InfoRow: expected mlst_scheme=ecoli_achtman_4, got %q", row["mlst_scheme"])
+	}
+	if row["mlst_st"] == "" {
+		t.Error("InfoRow: mlst_st is empty")
 	}
 }

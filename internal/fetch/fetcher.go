@@ -27,15 +27,17 @@ var tableURLs = map[string]string{
 	"ena_20240625.parquet":   "https://osf.io/download/69c51ec99ce80b96ac54cd08/",
 	"ena_202505_used.parquet": "https://osf.io/download/69c51f475eedad376954ce7b/",
 	"ena_661k.parquet":       "https://osf.io/download/69c51f57376eb79a651d2d83/",
+	"mlst.parquet":           "https://osf.io/download/69c66d33fa3d973d94254f46/",
 }
 
-// coreTables lists the five essential tables for basic ATB operations.
+// coreTables lists the essential tables for basic ATB operations.
 var coreTables = []string{
 	"assembly.parquet",
 	"assembly_stats.parquet",
 	"checkm2.parquet",
 	"sylph.parquet",
 	"run.parquet",
+	"mlst.parquet",
 }
 
 // CoreTables returns the names of the five core parquet tables.

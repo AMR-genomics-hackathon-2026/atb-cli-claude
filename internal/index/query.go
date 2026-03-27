@@ -62,6 +62,9 @@ type QueryParams struct {
 	SortDesc         bool
 	Limit            int
 	Offset           int
+	SequenceType     string // filter by mlst_st
+	Scheme           string // filter by mlst_scheme
+	MLSTStatus       string // filter by mlst_status
 }
 
 // userColToSQL maps user-facing column names to SQLite column names.
@@ -84,6 +87,11 @@ var userColToSQL = map[string]string{
 	"Contamination":       "contamination",
 	"Genome_Size":         "genome_size",
 	"GC_Content":          "gc_content",
+	"mlst_scheme":         "mlst_scheme",
+	"mlst_st":             "mlst_st",
+	"mlst_status":         "mlst_status",
+	"mlst_score":          "mlst_score",
+	"mlst_alleles":        "mlst_alleles",
 }
 
 // sqlToUserCol is the reverse mapping, used when building result maps.
@@ -117,6 +125,11 @@ var allSQLCols = []string{
 	"contamination",
 	"genome_size",
 	"gc_content",
+	"mlst_scheme",
+	"mlst_st",
+	"mlst_status",
+	"mlst_score",
+	"mlst_alleles",
 }
 
 // InfoRow returns all indexed columns for a single sample as a map.
@@ -128,6 +141,18 @@ func (d *DB) InfoRow(sampleAccession string) (map[string]string, error) {
 	result, err := scanRow(row, allSQLCols)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("sample %q not found in index", sampleAccession)
+	}
+	return result, err
+}
+
+// MLSTForSample returns MLST fields for a single sample, or nil if not indexed.
+func (d *DB) MLSTForSample(sampleAccession string) (map[string]string, error) {
+	mlstCols := []string{"mlst_scheme", "mlst_st", "mlst_status", "mlst_score", "mlst_alleles"}
+	q := fmt.Sprintf("SELECT %s FROM samples WHERE sample_accession = ?", strings.Join(mlstCols, ", "))
+	row := d.db.QueryRow(q, sampleAccession)
+	result, err := scanRow(row, mlstCols)
+	if err == sql.ErrNoRows {
+		return nil, nil
 	}
 	return result, err
 }
@@ -178,6 +203,18 @@ func (d *DB) Query(params QueryParams) ([]map[string]string, error) {
 			args = append(args, s)
 		}
 		conditions = append(conditions, fmt.Sprintf("sample_accession IN (%s)", strings.Join(placeholders, ", ")))
+	}
+	if params.SequenceType != "" {
+		conditions = append(conditions, "mlst_st = ?")
+		args = append(args, params.SequenceType)
+	}
+	if params.Scheme != "" {
+		conditions = append(conditions, "lower(mlst_scheme) = lower(?)")
+		args = append(args, params.Scheme)
+	}
+	if params.MLSTStatus != "" {
+		conditions = append(conditions, "upper(mlst_status) = upper(?)")
+		args = append(args, params.MLSTStatus)
 	}
 
 	// Determine which SQL columns to SELECT.

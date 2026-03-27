@@ -11,7 +11,7 @@ func TestBuild(t *testing.T) {
 
 	// Copy fixtures into temp dir so Build can find them.
 	fixtures := "../../testdata/fixtures"
-	for _, name := range []string{"assembly.parquet", "assembly_stats.parquet", "checkm2.parquet"} {
+	for _, name := range []string{"assembly.parquet", "assembly_stats.parquet", "checkm2.parquet", "mlst.parquet"} {
 		src := filepath.Join(fixtures, name)
 		dst := filepath.Join(dir, name)
 		data, err := os.ReadFile(src)
@@ -71,6 +71,15 @@ func TestBuild(t *testing.T) {
 	}
 	if completeness != 99.5 {
 		t.Errorf("expected completeness=99.5 for SAMN00000001, got %f", completeness)
+	}
+
+	// Verify MLST was joined (mlst_scheme should be populated for E. coli).
+	var mlstScheme string
+	if err := db.db.QueryRow("SELECT mlst_scheme FROM samples WHERE sample_accession = 'SAMN00000001'").Scan(&mlstScheme); err != nil {
+		t.Fatalf("querying mlst_scheme: %v", err)
+	}
+	if mlstScheme != "ecoli_achtman_4" {
+		t.Errorf("expected mlst_scheme=ecoli_achtman_4 for SAMN00000001, got %q", mlstScheme)
 	}
 
 	_ = logs

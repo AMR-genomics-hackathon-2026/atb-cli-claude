@@ -79,6 +79,15 @@ type AMRRow struct {
 	Species        string  `parquet:"Species"`
 }
 
+type MLSTRow struct {
+	Sample  string `parquet:"sample"`
+	Scheme  string `parquet:"mlst_scheme"`
+	ST      string `parquet:"mlst_st"`
+	Status  string `parquet:"mlst_status"`
+	Score   int32  `parquet:"mlst_score"`
+	Alleles string `parquet:"mlst_alleles"`
+}
+
 func GenusFromSpecies(species string) string {
 	if species == "" {
 		return ""
