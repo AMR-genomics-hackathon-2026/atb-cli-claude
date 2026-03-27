@@ -310,10 +310,117 @@ def generate_ena():
     print(f"ena_20250506.parquet: {len(table)} rows")
 
 
+def generate_mlst():
+    # MLST scheme mapping by species
+    # E. coli: ecoli_achtman_4 (SAMN1, SAMN2, SAMN11, SAMN12, SAMN19)
+    # S. aureus: saureus (SAMN3, SAMN4, SAMN8)
+    # S. enterica: salmonella (SAMN5, SAMN6, SAMN18)
+    # K. pneumoniae: klebsiella (SAMN7, SAMN9)
+    # P. aeruginosa: paeruginosa (SAMN10, SAMN13)
+    # S. pyogenes: spyogenes (SAMN14, SAMN15)
+    # M. tuberculosis: "-" (not in MLST database)
+    # unknown: "-"
+    scheme_map = {
+        "Escherichia coli": "ecoli_achtman_4",
+        "Staphylococcus aureus": "saureus",
+        "Salmonella enterica": "salmonella",
+        "Klebsiella pneumoniae": "klebsiella",
+        "Pseudomonas aeruginosa": "paeruginosa",
+        "Streptococcus pyogenes": "spyogenes",
+        "Mycobacterium tuberculosis": "-",
+        "unknown": "-",
+    }
+    # ST numbers per species (cycling through a few)
+    st_map = {
+        "Escherichia coli": ["131", "131", "73", "10", "131"],
+        "Staphylococcus aureus": ["8", "22", "8"],
+        "Salmonella enterica": ["11", "19", "34"],
+        "Klebsiella pneumoniae": ["258", "45"],
+        "Pseudomonas aeruginosa": ["175", "235"],
+        "Streptococcus pyogenes": ["28", "36"],
+        "Mycobacterium tuberculosis": ["-", "-"],
+        "unknown": ["-"],
+    }
+    status_map = {
+        "Escherichia coli": ["PERFECT", "PERFECT", "PERFECT", "OK", "PERFECT"],
+        "Staphylococcus aureus": ["PERFECT", "NOVEL", "PERFECT"],
+        "Salmonella enterica": ["PERFECT", "PERFECT", "OK"],
+        "Klebsiella pneumoniae": ["PERFECT", "PERFECT"],
+        "Pseudomonas aeruginosa": ["PERFECT", "OK"],
+        "Streptococcus pyogenes": ["PERFECT", "PERFECT"],
+        "Mycobacterium tuberculosis": ["NONE", "NONE"],
+        "unknown": ["NONE"],
+    }
+    alleles_map = {
+        "Escherichia coli": [
+            "adk(10);fumC(11);gyrB(4);icd(8);mdh(8);purA(8);recA(2)",
+            "adk(10);fumC(11);gyrB(4);icd(8);mdh(8);purA(8);recA(2)",
+            "adk(7);fumC(40);gyrB(47);icd(12);mdh(36);purA(18);recA(15)",
+            "adk(3);fumC(6);gyrB(4);icd(5);mdh(15);purA(3);recA(7)",
+            "adk(10);fumC(11);gyrB(4);icd(8);mdh(8);purA(8);recA(2)",
+        ],
+        "Staphylococcus aureus": [
+            "arcC(3);aroE(3);glpF(1);gmk(1);pta(4);tpi(4);yqiL(3)",
+            "arcC(1);aroE(4);glpF(1);gmk(1);pta(4);tpi(4);yqiL(3)",
+            "arcC(3);aroE(3);glpF(1);gmk(1);pta(4);tpi(4);yqiL(3)",
+        ],
+        "Salmonella enterica": [
+            "aroC(10);dnaN(7);hemD(12);hisD(9);purE(7);sucA(3);thrA(3)",
+            "aroC(10);dnaN(7);hemD(12);hisD(9);purE(7);sucA(3);thrA(3)",
+            "aroC(10);dnaN(7);hemD(12);hisD(9);purE(7);sucA(3);thrA(5)",
+        ],
+        "Klebsiella pneumoniae": [
+            "gapA(3);infB(3);mdh(1);pgi(1);phoE(9);rpoB(4);tonB(12)",
+            "gapA(3);infB(3);mdh(1);pgi(1);phoE(9);rpoB(4);tonB(4)",
+        ],
+        "Pseudomonas aeruginosa": [
+            "acsA(28);aroE(5);guaA(4);mutL(4);nuoD(3);ppsA(4);trpE(4)",
+            "acsA(28);aroE(5);guaA(4);mutL(4);nuoD(3);ppsA(4);trpE(4)",
+        ],
+        "Streptococcus pyogenes": [
+            "gki(2);gtr(5);murI(4);mutS(2);recP(2);xpt(3);yqiL(3)",
+            "gki(1);gtr(5);murI(4);mutS(2);recP(2);xpt(3);yqiL(3)",
+        ],
+        "Mycobacterium tuberculosis": ["-", "-"],
+        "unknown": ["-"],
+    }
+
+    species_counters = {sp: 0 for sp in scheme_map}
+    schemes, sts, statuses, scores, alleles_list = [], [], [], [], []
+    for sp in SPECIES:
+        c = species_counters[sp]
+        st_list = st_map[sp]
+        status_list = status_map[sp]
+        alleles_list_sp = alleles_map[sp]
+        schemes.append(scheme_map[sp])
+        sts.append(st_list[c % len(st_list)])
+        statuses.append(status_list[c % len(status_list)])
+        # score: PERFECT=100, NOVEL=95, OK=90, NONE=0
+        status_val = status_list[c % len(status_list)]
+        score_val = {"PERFECT": 100, "NOVEL": 95, "OK": 90, "NONE": 0}.get(status_val, 80)
+        scores.append(score_val)
+        alleles_list.append(alleles_list_sp[c % len(alleles_list_sp)])
+        species_counters[sp] = c + 1
+
+    table = pa.table(
+        {
+            "sample": pa.array(SAMPLE_IDS, type=pa.large_string()),
+            "mlst_scheme": pa.array(schemes, type=pa.large_string()),
+            "mlst_st": pa.array(sts, type=pa.large_string()),
+            "mlst_status": pa.array(statuses, type=pa.large_string()),
+            "mlst_score": pa.array(scores, type=pa.int32()),
+            "mlst_alleles": pa.array(alleles_list, type=pa.large_string()),
+        }
+    )
+    pq.write_table(table, OUTPUT_DIR / "mlst.parquet")
+    print(f"mlst.parquet: {len(table)} rows")
+
+
 if __name__ == "__main__":
     generate_assembly()
     generate_assembly_stats()
     generate_checkm2()
     generate_run()
     generate_ena()
+    generate_mlst()
     print(f"\nAll fixtures written to {OUTPUT_DIR}")
