@@ -250,12 +250,9 @@ atb query --species "Escherichia coli" --hq-only --limit 200 \
 
 ### Query AMR genes
 
-AMR data comes from [AMRFinderPlus](https://github.com/ncbi/amr) results run across all ATB genomes. Data is organized by genus and includes three categories: AMR resistance genes, stress response genes, and virulence factors.
+AMR data comes from [AMRFinderPlus](https://github.com/ncbi/amr) results run across all ATB genomes. All AMR, stress, and virulence data is in a single `amrfinderplus.parquet` file (25.6M rows, 81 MB) downloaded automatically by `atb fetch`.
 
 ```bash
-# First, fetch AMR data for the genus you need
-atb fetch --amr --genus Escherichia
-
 # Get all AMR gene hits for E. coli (high-quality genomes only)
 atb amr --species "Escherichia coli" --hq-only --limit 100
 
@@ -279,15 +276,9 @@ atb amr --species "Escherichia coli" --type all
 
 # Output to file
 atb amr --species "Klebsiella pneumoniae" --hq-only --format csv -o kpn_amr.csv
-
-# Fetch AMR data for multiple genera
-atb fetch --amr --genus Escherichia,Salmonella,Klebsiella
-
-# Fetch all three element types
-atb fetch --amr --genus Escherichia --amr-types amr,stress,virulence
 ```
 
-AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`
+AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`, `genus`
 
 ### Query MLST (Multi-Locus Sequence Typing)
 
@@ -324,21 +315,15 @@ MLST status values: `PERFECT` (exact match), `NOVEL` (new combination), `OK` (pa
 ### Fetch the database
 
 ```bash
-# Download core metadata tables (~540MB: assembly, assembly_stats, checkm2, sylph, run)
+# Download core tables including AMR and MLST (~700 MB)
+# Includes: assembly, assembly_stats, checkm2, sylph, run, mlst, amrfinderplus
 atb fetch
 
-# Download all metadata tables including ENA (~3GB)
+# Download all tables including ENA metadata (~3.2 GB)
 atb fetch --all
 
-# Download specific metadata tables
+# Download specific tables only
 atb fetch --tables ena_20250506.parquet
-
-# Download AMR gene data by genus
-atb fetch --amr --genus Escherichia
-atb fetch --amr --genus Salmonella,Klebsiella,Pseudomonas
-
-# Download AMR + stress + virulence data
-atb fetch --amr --genus Escherichia --amr-types amr,stress,virulence
 
 # Force re-download
 atb fetch --force
