@@ -115,7 +115,7 @@ Use --tables to specify exact tables by name.`,
 				return fmt.Errorf("%d table(s) failed to download", failed)
 			}
 
-			fmt.Fprintf(os.Stderr, "All tables downloaded successfully.\n")
+			fmt.Fprintf(os.Stderr, "All tables downloaded successfully.\n\n")
 
 			stderrLog := func(format string, args ...any) {
 				fmt.Fprintf(os.Stderr, format+"\n", args...)
@@ -127,7 +127,7 @@ Use --tables to specify exact tables by name.`,
 			}
 
 			// Auto-build the SQLite index after a successful fetch.
-			fmt.Fprintf(os.Stderr, "Building query index...\n")
+			fmt.Fprintf(os.Stderr, "\nBuilding query index...\n")
 			if err := index.Build(dir, stderrLog); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: index build failed: %v\n", err)
 			}

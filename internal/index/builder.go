@@ -106,7 +106,6 @@ func Build(dataDir string, logf func(string, ...any)) error {
 	tmpPath := filepath.Join(dataDir, IndexFileName+".tmp")
 	finalPath := filepath.Join(dataDir, IndexFileName)
 
-	// Remove any leftover temp file.
 	_ = os.Remove(tmpPath)
 
 	db, err := sql.Open("sqlite", tmpPath+"?_journal_mode=WAL&_synchronous=NORMAL")
@@ -119,14 +118,39 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		return fmt.Errorf("creating schema: %w", err)
 	}
 
-	// Step 1: Read assembly (must complete before inserts).
-	logf("reading assembly.parquet...")
+	// Count available secondary tables to determine total steps.
+	type secondaryTable struct {
+		name string
+		path string
+	}
+	var secondaries []secondaryTable
+	for _, s := range []secondaryTable{
+		{"assembly_stats", filepath.Join(dataDir, "assembly_stats.parquet")},
+		{"checkm2", filepath.Join(dataDir, "checkm2.parquet")},
+		{"mlst", filepath.Join(dataDir, "mlst.parquet")},
+	} {
+		if _, err := os.Stat(s.path); err == nil {
+			secondaries = append(secondaries, s)
+		}
+	}
+	totalSteps := 2 + len(secondaries) // read assembly + index assembly + each secondary
+	step := 0
+
+	stepLog := func(label string, args ...any) {
+		step++
+		logf("  [%d/%d] %s", step, totalSteps, fmt.Sprintf(label, args...))
+	}
+
+	// Step 1: Read assembly.
+	t := time.Now()
 	assemblies, err := pq.ReadAll[pq.AssemblyRow](filepath.Join(dataDir, "assembly.parquet"))
 	if err != nil {
 		return fmt.Errorf("reading assembly: %w", err)
 	}
+	assemblyCount := len(assemblies)
+	stepLog("Reading assembly.parquet (%s rows) ... %s", formatRowCount(assemblyCount), elapsed(t))
 
-	// Step 2: Start reading secondary tables in parallel while assembly insert runs.
+	// Start reading secondary tables in parallel while assembly insert runs.
 	statsCh := make(chan readResult[pq.AssemblyStatsRow], 1)
 	checkm2Ch := make(chan readResult[pq.CheckM2Row], 1)
 	mlstCh := make(chan readResult[pq.MLSTRow], 1)
@@ -137,7 +161,6 @@ func Build(dataDir string, logf func(string, ...any)) error {
 			statsCh <- readResult[pq.AssemblyStatsRow]{}
 			return
 		}
-		logf("reading assembly_stats.parquet...")
 		rows, err := pq.ReadAll[pq.AssemblyStatsRow](path)
 		statsCh <- readResult[pq.AssemblyStatsRow]{rows, err}
 	}()
@@ -148,7 +171,6 @@ func Build(dataDir string, logf func(string, ...any)) error {
 			checkm2Ch <- readResult[pq.CheckM2Row]{}
 			return
 		}
-		logf("reading checkm2.parquet...")
 		rows, err := pq.ReadAll[pq.CheckM2Row](path)
 		checkm2Ch <- readResult[pq.CheckM2Row]{rows, err}
 	}()
@@ -159,15 +181,12 @@ func Build(dataDir string, logf func(string, ...any)) error {
 			mlstCh <- readResult[pq.MLSTRow]{}
 			return
 		}
-		logf("reading mlst.parquet...")
 		rows, err := pq.ReadAll[pq.MLSTRow](path)
 		mlstCh <- readResult[pq.MLSTRow]{rows, err}
 	}()
 
-	// Step 3: Insert assembly rows (secondary reads happen in background).
-	assemblyCount := len(assemblies)
-	logf("inserting %d assembly rows...", assemblyCount)
-
+	// Step 2: Index assembly rows.
+	t = time.Now()
 	if err := insertInBatches(db, insertAssembly, assemblyCount, func(stmt *sql.Stmt, i int) error {
 		a := assemblies[i]
 		_, err := stmt.Exec(
@@ -179,15 +198,16 @@ func Build(dataDir string, logf func(string, ...any)) error {
 	}); err != nil {
 		return fmt.Errorf("inserting assembly: %w", err)
 	}
-	assemblies = nil // free memory
+	assemblies = nil
+	stepLog("Indexing assembly rows ... %s", elapsed(t))
 
-	// Step 4: Wait for secondary reads and apply updates sequentially.
+	// Steps 3+: Merge secondary tables.
 	statsResult := <-statsCh
 	if statsResult.err != nil {
 		return fmt.Errorf("reading assembly_stats: %w", statsResult.err)
 	}
 	if len(statsResult.rows) > 0 {
-		logf("updating %d assembly_stats rows...", len(statsResult.rows))
+		t = time.Now()
 		if err := insertInBatches(db, updateStats, len(statsResult.rows), func(stmt *sql.Stmt, i int) error {
 			s := statsResult.rows[i]
 			_, err := stmt.Exec(s.TotalLength, s.Number, s.N50, s.N90, s.SampleAccession)
@@ -195,6 +215,7 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		}); err != nil {
 			return fmt.Errorf("updating assembly_stats: %w", err)
 		}
+		stepLog("Merging assembly_stats (%s rows) ... %s", formatRowCount(len(statsResult.rows)), elapsed(t))
 	}
 
 	checkm2Result := <-checkm2Ch
@@ -202,7 +223,7 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		return fmt.Errorf("reading checkm2: %w", checkm2Result.err)
 	}
 	if len(checkm2Result.rows) > 0 {
-		logf("updating %d checkm2 rows...", len(checkm2Result.rows))
+		t = time.Now()
 		if err := insertInBatches(db, updateCheckM2, len(checkm2Result.rows), func(stmt *sql.Stmt, i int) error {
 			c := checkm2Result.rows[i]
 			_, err := stmt.Exec(c.CompletenessGeneral, c.Contamination, c.GenomeSize, c.GCContent, c.SampleAccession)
@@ -210,6 +231,7 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		}); err != nil {
 			return fmt.Errorf("updating checkm2: %w", err)
 		}
+		stepLog("Merging checkm2 (%s rows) ... %s", formatRowCount(len(checkm2Result.rows)), elapsed(t))
 	}
 
 	mlstResult := <-mlstCh
@@ -217,7 +239,7 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		return fmt.Errorf("reading mlst: %w", mlstResult.err)
 	}
 	if len(mlstResult.rows) > 0 {
-		logf("updating %d mlst rows...", len(mlstResult.rows))
+		t = time.Now()
 		if err := insertInBatches(db, updateMLST, len(mlstResult.rows), func(stmt *sql.Stmt, i int) error {
 			m := mlstResult.rows[i]
 			_, err := stmt.Exec(m.Scheme, m.ST, m.Status, m.Score, m.Alleles, m.Sample)
@@ -225,23 +247,41 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		}); err != nil {
 			return fmt.Errorf("updating mlst: %w", err)
 		}
+		stepLog("Merging mlst (%s rows) ... %s", formatRowCount(len(mlstResult.rows)), elapsed(t))
 	}
 
 	// Flush WAL and close before rename.
 	if _, err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
-		logf("wal checkpoint warning: %v", err)
+		logf("  warning: wal checkpoint: %v", err)
 	}
 	if err := db.Close(); err != nil {
 		return fmt.Errorf("closing sqlite: %w", err)
 	}
 
-	// Atomic rename.
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		return fmt.Errorf("renaming index: %w", err)
 	}
 
-	logf("index built in %s (%d samples)", time.Since(start).Round(time.Millisecond), assemblyCount)
+	logf("Index ready: %s samples (%s)", formatRowCount(assemblyCount), elapsed(start))
 	return nil
+}
+
+func elapsed(t time.Time) string {
+	d := time.Since(t)
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return d.Truncate(100 * time.Millisecond).String()
+}
+
+func formatRowCount(n int) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%d,%03d,%03d", n/1_000_000, (n/1_000)%1_000, n%1_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%d,%03d", n/1_000, n%1_000)
+	}
+	return fmt.Sprintf("%d", n)
 }
 
 // insertInBatches runs fn for each index [0, count) using batched transactions

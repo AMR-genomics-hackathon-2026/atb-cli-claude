@@ -1,8 +1,10 @@
 package index
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -25,13 +27,25 @@ func TestBuild(t *testing.T) {
 
 	var logs []string
 	logf := func(format string, args ...any) {
-		// Collect log messages but don't print them during tests.
-		_ = format
-		_ = args
+		logs = append(logs, fmt.Sprintf(format, args...))
 	}
 
 	if err := Build(dir, logf); err != nil {
 		t.Fatalf("Build failed: %v", err)
+	}
+
+	// Verify structured progress output.
+	if len(logs) < 5 {
+		t.Errorf("expected at least 5 log lines (step progress), got %d", len(logs))
+	}
+	// First log should be step [1/5]
+	if len(logs) > 0 && !strings.Contains(logs[0], "[1/") {
+		t.Errorf("expected first log to contain step counter, got %q", logs[0])
+	}
+	// Last log should be the summary line
+	last := logs[len(logs)-1]
+	if !strings.Contains(last, "Index ready") {
+		t.Errorf("expected final log to say 'Index ready', got %q", last)
 	}
 
 	// Index file must exist.
