@@ -592,7 +592,7 @@ Requires Go 1.23+. Pure Go, no CGO - cross-compilation works out of the box.
 
 **Metadata** (assembly, QC, ENA): [AllTheBacteria](https://allthebacteria.org) project on [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage), path: `Aggregated/Latest_2025-05/atb.metadata.202505.parquet/`
 
-**AMR/Stress/Virulence genes**: [AMRFinderPlus](https://github.com/ncbi/amr) results from the [atb-amr-shiny](https://github.com/immem-hackathon-2025/atb-amr-shiny) project, Hive-partitioned by genus under `data/amr_by_genus/`, `data/stress_by_genus/`, `data/virulence_by_genus/`
+**AMR/Stress/Virulence genes**: [AMRFinderPlus](https://github.com/ncbi/amr) results across all ATB genomes, hosted on [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage) as `amrfinderplus.parquet` (25.6M rows, 81 MB). Downloaded by `atb fetch` and automatically partitioned by genus with per-genus SQLite indexes for instant queries.
 
 ## License
 
