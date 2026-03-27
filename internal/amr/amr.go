@@ -8,8 +8,8 @@ import (
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
 
-// elementTypeDir maps an element type string to the Hive-partitioned directory name.
-func elementTypeDir(elementType string) string {
+// ElementTypeDir maps an element type string to the Hive-partitioned directory name.
+func ElementTypeDir(elementType string) string {
 	switch strings.ToUpper(elementType) {
 	case "STRESS":
 		return "stress_by_genus"
@@ -91,7 +91,7 @@ func Query(dataDir, genus, elementType string, filters Filters) ([]Result, error
 
 	var results []Result
 	for _, et := range types {
-		dir := elementTypeDir(et)
+		dir := ElementTypeDir(et)
 		genusDir := filepath.Join(dataDir, "amr", dir, "Genus="+genus)
 
 		rows, err := ReadGenusParts(genusDir)

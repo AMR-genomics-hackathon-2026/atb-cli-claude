@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -106,6 +107,22 @@ func textResult(v any) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
+// listAvailableGenera returns the genus names that have AMR data on disk.
+func listAvailableGenera(dataDir, elementType string) []string {
+	dir := filepath.Join(dataDir, "amr", amr.ElementTypeDir(elementType))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var genera []string
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "Genus=") {
+			genera = append(genera, strings.TrimPrefix(e.Name(), "Genus="))
+		}
+	}
+	return genera
+}
+
 func errorResult(msg string) (*mcp.CallToolResult, any, error) {
 	return &mcp.CallToolResult{
 		IsError: true,
@@ -185,6 +202,18 @@ func makeAMRHandler(dataDir string) mcp.ToolHandlerFor[amrInput, any] {
 		elementType := in.ElementType
 		if elementType == "" {
 			elementType = "AMR"
+		}
+
+		// Check if AMR data exists for this genus before querying.
+		genusDir := filepath.Join(dataDir, "amr", amr.ElementTypeDir(elementType), "Genus="+genus)
+		if _, err := os.Stat(genusDir); err != nil {
+			// List available genera to help the caller.
+			available := listAvailableGenera(dataDir, elementType)
+			msg := fmt.Sprintf("AMR data not found for genus %q (looked in %s). Run: atb fetch --amr --genus %s", genus, genusDir, genus)
+			if len(available) > 0 {
+				msg += fmt.Sprintf("\nAvailable genera: %s", strings.Join(available, ", "))
+			}
+			return errorResult(msg)
 		}
 
 		filters := amr.Filters{

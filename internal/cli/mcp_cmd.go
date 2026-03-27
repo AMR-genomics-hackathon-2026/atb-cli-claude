@@ -2,11 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/mcpserver"
 )
 
@@ -64,8 +63,7 @@ Usage with ChatGPT / OpenAI API (HTTP/SSE mode):
 				dir = cfg.General.DataDir
 			}
 			if dir == "" {
-				home, _ := os.UserHomeDir()
-				dir = filepath.Join(home, ".atb", "data")
+				dir = config.DefaultDataDir()
 			}
 
 			if httpAddr != "" {
