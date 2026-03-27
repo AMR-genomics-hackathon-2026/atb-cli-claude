@@ -12,8 +12,8 @@ import (
 
 func TestCoreTables(t *testing.T) {
 	tables := fetch.CoreTables()
-	if len(tables) != 6 {
-		t.Fatalf("expected 6 core tables, got %d", len(tables))
+	if len(tables) != 7 {
+		t.Fatalf("expected 7 core tables, got %d", len(tables))
 	}
 
 	want := map[string]bool{
@@ -23,6 +23,7 @@ func TestCoreTables(t *testing.T) {
 		"sylph.parquet":          true,
 		"run.parquet":            true,
 		"mlst.parquet":           true,
+		"amrfinderplus.parquet":  true,
 	}
 
 	for _, name := range tables {
@@ -34,8 +35,8 @@ func TestCoreTables(t *testing.T) {
 
 func TestAllTables(t *testing.T) {
 	tables := fetch.AllTables()
-	if len(tables) != 11 {
-		t.Fatalf("expected 11 tables, got %d", len(tables))
+	if len(tables) != 12 {
+		t.Fatalf("expected 12 tables, got %d", len(tables))
 	}
 }
 
