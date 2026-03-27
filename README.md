@@ -250,7 +250,7 @@ atb query --species "Escherichia coli" --hq-only --limit 200 \
 
 ### Query AMR genes
 
-AMR data comes from [AMRFinderPlus](https://github.com/ncbi/amr) results run across all ATB genomes. All AMR, stress, and virulence data is in a single `amrfinderplus.parquet` file (25.6M rows, 81 MB) downloaded automatically by `atb fetch`.
+AMR data comes from [AMRFinderPlus](https://github.com/ncbi/amr) results run across all ATB genomes. All AMR, stress, and virulence data is in `amrfinderplus.parquet` (25.6M rows, 81 MB), downloaded automatically by `atb fetch` and partitioned by genus for fast queries.
 
 ```bash
 # Get all AMR gene hits for E. coli (high-quality genomes only)
@@ -261,6 +261,15 @@ atb amr --species "Escherichia coli" --hq-only --class "BETA-LACTAM"
 
 # Wildcard gene search (all beta-lactamase genes)
 atb amr --species "Escherichia coli" --gene "bla%"
+
+# Compare resistance across multiple species
+atb amr --species "Escherichia coli,Klebsiella pneumoniae" --class "BETA-LACTAM"
+
+# Find a gene across ALL genera (no species filter needed)
+atb amr --gene "blaCTX-M-15" --limit 100
+
+# Search by drug class across all genera
+atb amr --class "CARBAPENEM" --limit 50
 
 # Filter by detection quality
 atb amr --species "Escherichia coli" --min-coverage 95 --min-identity 98
@@ -277,6 +286,8 @@ atb amr --species "Escherichia coli" --type all
 # Output to file
 atb amr --species "Klebsiella pneumoniae" --hq-only --format csv -o kpn_amr.csv
 ```
+
+`--species` accepts comma-separated values for multi-species comparison. When omitted, `--gene` or `--class` is required to search across all genera.
 
 AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`, `genus`
 
@@ -528,26 +539,30 @@ Queries involving ENA metadata (country, platform, collection date) still use pa
 
 Downloads are memory-efficient (18 MB flat). Average genome assembly is ~1.5 MB compressed.
 
-### Index build cost
+### Post-fetch build cost
+
+After downloading, `atb fetch` automatically builds AMR partitions and the query index:
 
 | Step | Time |
 |------|------|
+| AMR genus partitioning (25.6M rows) | ~1-2 min |
 | Read assembly.parquet (3.2M rows) + insert | ~2 min |
-| Read assembly_stats.parquet (2.8M rows) + update | ~1 min |
-| Read checkm2.parquet (2.8M rows) + update | ~1 min |
-| **Total** | **~4 min** |
+| Merge assembly_stats (2.8M rows) | ~1 min |
+| Merge checkm2 (2.8M rows) | ~1 min |
+| Merge mlst (2.4M rows) | ~30s |
+| **Total** | **~5-6 min** |
 
-Index file size: 1.2 GB. Built once, used for all subsequent queries. Rebuild with `atb index --force`.
+Index file size: 1.2 GB. Built once, used for all subsequent queries. Rebuild with `atb fetch --force`.
 
 ### Disk usage
 
 | Component | Size |
 |-----------|------|
-| Core metadata parquet (5 tables) | 540 MB |
+| Core metadata parquet (7 tables) | 700 MB |
 | ENA parquet (5 tables, optional) | 2.5 GB |
 | SQLite index | 1.2 GB |
-| AMR data (per genus, e.g. Escherichia) | ~19 MB |
-| **Typical install (core + index)** | **~1.7 GB** |
+| AMR genus partitions (auto-built) | ~81 MB |
+| **Typical install (core + index + partitions)** | **~2 GB** |
 
 ### Notes on species names
 
