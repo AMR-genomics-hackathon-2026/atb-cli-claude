@@ -99,15 +99,36 @@ main() {
     "${INSTALL_DIR}/${BINARY}" version 2>/dev/null || true
     echo ""
 
-    # Check if INSTALL_DIR is in PATH
+    # Ensure INSTALL_DIR is in PATH; if not, append to the user's shell config
     case ":${PATH}:" in
         *":${INSTALL_DIR}:"*) ;;
         *)
-            printf "\033[1;33mwarning:\033[0m %s is not in your PATH.\n" "$INSTALL_DIR"
-            echo "  Add it by running:"
-            echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
-            echo "  Or add that line to your ~/.bashrc or ~/.zshrc"
-            echo ""
+            local shell_rc=""
+            if [ -n "${ZSH_VERSION:-}" ] || [ "$(basename "${SHELL:-}")" = "zsh" ]; then
+                shell_rc="${HOME}/.zshrc"
+            elif [ -n "${BASH_VERSION:-}" ] || [ "$(basename "${SHELL:-}")" = "bash" ]; then
+                shell_rc="${HOME}/.bashrc"
+            elif [ -f "${HOME}/.profile" ]; then
+                shell_rc="${HOME}/.profile"
+            fi
+
+            if [ -n "$shell_rc" ]; then
+                local path_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
+                if ! grep -qF "$INSTALL_DIR" "$shell_rc" 2>/dev/null; then
+                    echo "" >> "$shell_rc"
+                    echo "# Added by atb-cli installer" >> "$shell_rc"
+                    echo "$path_line" >> "$shell_rc"
+                    info "Added ${INSTALL_DIR} to ${shell_rc}"
+                fi
+                printf "\033[1;33mnotice:\033[0m Restart your shell or run the following to use atb now:\n"
+                echo "    source ${shell_rc}"
+                echo ""
+            else
+                printf "\033[1;33mwarning:\033[0m %s is not in your PATH.\n" "$INSTALL_DIR"
+                echo "  Add it manually by running:"
+                echo "    export PATH=\"${INSTALL_DIR}:\$PATH\""
+                echo ""
+            fi
             ;;
     esac
 
