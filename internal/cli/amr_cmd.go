@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/fetch"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
@@ -34,10 +32,9 @@ func newAMRCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "amr",
 		Short: "Query AMR gene data for a species",
-		Long: `Query AMRFinderPlus gene hits from Hive-partitioned parquet files.
+		Long: `Query AMRFinderPlus gene hits from the merged amrfinderplus.parquet file.
 
-Data is organized by genus and element type (amr, stress, virulence).
-Use 'atb fetch --amr --genus <Genus>' to download data before querying.`,
+Run 'atb fetch' to download the data before querying.`,
 		Example: `  # Get AMR gene hits for E. coli (HQ only)
   atb amr --species "Escherichia coli" --hq-only --limit 100
 
@@ -72,18 +69,10 @@ Use 'atb fetch --amr --genus <Genus>' to download data before querying.`,
 				return fmt.Errorf("could not derive genus from species %q", species)
 			}
 
-			// Check if AMR data exists for this genus
-			amrDir := amrDirForType(dir, genus, elementType)
-			if _, statErr := os.Stat(amrDir); statErr != nil {
-				if !offerFetchAMR(dir, genus, elementType) {
-					return fmt.Errorf("AMR data not found for genus %q — run 'atb fetch --amr --genus %s' to download", genus, genus)
-				}
-				types := amrTypesForElementType(elementType)
-				f := fetch.New(fetch.Config{DataDir: dir})
-				fmt.Fprintf(os.Stderr, "Fetching AMR data for genus %q...\n", genus)
-				if fetchErr := f.FetchAMRGenus(genus, types, false); fetchErr != nil {
-					return fmt.Errorf("fetching AMR data: %w", fetchErr)
-				}
+			// Check if amrfinderplus.parquet exists
+			amrPath := filepath.Join(dir, amr.AMRFileName)
+			if _, statErr := os.Stat(amrPath); statErr != nil {
+				return fmt.Errorf("AMR data not found — run 'atb fetch' to download %s", amr.AMRFileName)
 			}
 
 			// Optionally build HQ sample set from assembly.parquet
@@ -112,9 +101,10 @@ Use 'atb fetch --amr --genus <Genus>' to download data before querying.`,
 				MinCoverage: minCoverage,
 				MinIdentity: minIdentity,
 				ElementType: elementType,
+				Genus:       genus,
 			}
 
-			results, err := amr.Query(dir, genus, elementType, filters)
+			results, err := amr.Query(dir, filters)
 			if err != nil {
 				return fmt.Errorf("AMR query failed: %w", err)
 			}
@@ -164,52 +154,6 @@ Use 'atb fetch --amr --genus <Genus>' to download data before querying.`,
 	return cmd
 }
 
-// amrDirForType returns the genus directory for the given element type to check existence.
-func amrDirForType(dataDir, genus, elementType string) string {
-	var dirName string
-	switch strings.ToUpper(elementType) {
-	case "STRESS":
-		dirName = "stress_by_genus"
-	case "VIRULENCE":
-		dirName = "virulence_by_genus"
-	default:
-		dirName = "amr_by_genus"
-	}
-	return filepath.Join(dataDir, "amr", dirName, "Genus="+genus)
-}
-
-// amrTypesForElementType returns the lowercase type strings for FetchAMRGenus.
-func amrTypesForElementType(elementType string) []string {
-	switch strings.ToLower(elementType) {
-	case "stress":
-		return []string{"stress"}
-	case "virulence":
-		return []string{"virulence"}
-	case "all":
-		return []string{"amr", "stress", "virulence"}
-	default:
-		return []string{"amr"}
-	}
-}
-
-// offerFetchAMR prompts the user interactively to fetch missing AMR data.
-// Returns true if the user accepted and we should proceed with fetching.
-func offerFetchAMR(dataDir, genus, elementType string) bool {
-	stat, _ := os.Stdin.Stat()
-	if stat.Mode()&os.ModeCharDevice == 0 {
-		return false // non-interactive
-	}
-
-	types := strings.Join(amrTypesForElementType(elementType), ",")
-	fmt.Fprintf(os.Stderr, "\nAMR data not found for genus %q (types: %s).\n", genus, types)
-	fmt.Fprintf(os.Stderr, "Download it now? [y/N]: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	answer := strings.TrimSpace(strings.ToLower(input))
-	return answer == "y" || answer == "yes"
-}
-
 // amrColumns returns the fixed column order for AMR output.
 func amrColumns() []string {
 	return []string{
@@ -223,6 +167,7 @@ func amrColumns() []string {
 		"coverage",
 		"identity",
 		"species",
+		"genus",
 	}
 }
 
@@ -240,8 +185,8 @@ func amrResultsToOutputRows(results []amr.Result) []output.Row {
 			"coverage":         strconv.FormatFloat(r.Coverage, 'f', 2, 64),
 			"identity":         strconv.FormatFloat(r.Identity, 'f', 2, 64),
 			"species":          r.Species,
+			"genus":            r.Genus,
 		}
 	}
 	return rows
 }
-

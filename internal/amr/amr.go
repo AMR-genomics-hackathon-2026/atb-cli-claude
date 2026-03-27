@@ -8,37 +8,8 @@ import (
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
 
-// ElementTypeDir maps an element type string to the Hive-partitioned directory name.
-func ElementTypeDir(elementType string) string {
-	switch strings.ToUpper(elementType) {
-	case "STRESS":
-		return "stress_by_genus"
-	case "VIRULENCE":
-		return "virulence_by_genus"
-	default:
-		return "amr_by_genus"
-	}
-}
-
-// ReadGenusParts reads all parquet files for a genus from a Hive-partitioned directory.
-// genusDir should be like <dataDir>/amr/amr_by_genus/Genus=Escherichia/
-func ReadGenusParts(genusDir string) ([]pq.AMRRow, error) {
-	pattern := filepath.Join(genusDir, "data_*.parquet")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("globbing %q: %w", pattern, err)
-	}
-
-	var rows []pq.AMRRow
-	for _, f := range files {
-		part, err := pq.ReadAll[pq.AMRRow](f)
-		if err != nil {
-			return nil, fmt.Errorf("reading %q: %w", f, err)
-		}
-		rows = append(rows, part...)
-	}
-	return rows, nil
-}
+// AMRFileName is the single merged parquet file containing all AMR data.
+const AMRFileName = "amrfinderplus.parquet"
 
 // Filters controls which AMR rows are returned by Query.
 type Filters struct {
@@ -55,6 +26,8 @@ type Filters struct {
 	MinIdentity float64
 	// ElementType restricts to a specific element type ("AMR", "STRESS", "VIRULENCE"). Empty means all.
 	ElementType string
+	// Genus restricts results to a specific bacterial genus (case-insensitive). Empty means all.
+	Genus string
 }
 
 // Result is a single AMR gene hit associated with a sample.
@@ -69,55 +42,36 @@ type Result struct {
 	Class           string
 	Subclass        string
 	Species         string
+	Genus           string
 }
 
-// Query loads AMR data for a genus, applies filters, and returns matching results.
-//
-// dataDir is the root data directory (e.g. ~/.atb/data).
-// genus is the bacterial genus (e.g. "Escherichia").
-// elementType controls which directory to query:
-//
-//	"AMR" or ""  -> amr_by_genus
-//	"STRESS"     -> stress_by_genus
-//	"VIRULENCE"  -> virulence_by_genus
-//	"all"        -> all three directories
-func Query(dataDir, genus, elementType string, filters Filters) ([]Result, error) {
-	var types []string
-	if strings.EqualFold(elementType, "all") {
-		types = []string{"AMR", "STRESS", "VIRULENCE"}
-	} else {
-		types = []string{elementType}
+// Query reads amrfinderplus.parquet from dataDir, applies filters, and returns matching results.
+func Query(dataDir string, filters Filters) ([]Result, error) {
+	amrPath := filepath.Join(dataDir, AMRFileName)
+
+	rows, err := pq.ReadFiltered[pq.AMRRow](amrPath, func(row pq.AMRRow) bool {
+		return matchesFilters(row, filters)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", AMRFileName, err)
 	}
 
-	var results []Result
-	for _, et := range types {
-		dir := ElementTypeDir(et)
-		genusDir := filepath.Join(dataDir, "amr", dir, "Genus="+genus)
-
-		rows, err := ReadGenusParts(genusDir)
-		if err != nil {
-			return nil, fmt.Errorf("reading genus %q from %q: %w", genus, dir, err)
-		}
-
-		for _, row := range rows {
-			if !matchesFilters(row, filters) {
-				continue
-			}
-			results = append(results, Result{
-				SampleAccession: row.Name,
-				GeneSymbol:      row.GeneSymbol,
-				ElementType:     row.ElementType,
-				ElementSubtype:  row.ElementSubtype,
-				Coverage:        row.Coverage,
-				Identity:        row.Identity,
-				Method:          row.Method,
-				Class:           row.Class,
-				Subclass:        row.Subclass,
-				Species:         row.Species,
-			})
-		}
+	results := make([]Result, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, Result{
+			SampleAccession: row.Name,
+			GeneSymbol:      row.GeneSymbol,
+			ElementType:     row.ElementType,
+			ElementSubtype:  row.ElementSubtype,
+			Coverage:        row.Coverage,
+			Identity:        row.Identity,
+			Method:          row.Method,
+			Class:           row.Class,
+			Subclass:        row.Subclass,
+			Species:         row.Species,
+			Genus:           row.Genus,
+		})
 	}
-
 	return results, nil
 }
 
@@ -143,6 +97,9 @@ func matchesFilters(row pq.AMRRow, f Filters) bool {
 		if !strings.EqualFold(row.ElementType, f.ElementType) {
 			return false
 		}
+	}
+	if f.Genus != "" && !strings.EqualFold(row.Genus, f.Genus) {
+		return false
 	}
 	return true
 }

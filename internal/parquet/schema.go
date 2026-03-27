@@ -77,6 +77,7 @@ type AMRRow struct {
 	Class          string  `parquet:"Class"`
 	Subclass       string  `parquet:"Subclass"`
 	Species        string  `parquet:"Species"`
+	Genus          string  `parquet:"Genus"`
 }
 
 type MLSTRow struct {
