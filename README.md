@@ -191,6 +191,13 @@ Output:
   completeness_general:  99.06
   contamination:         0.03
 
+=== MLST ===
+  scheme:    ecoli_achtman_4
+  ST:        131
+  status:    PERFECT
+  score:     100
+  alleles:   adk(53);fumC(40);gyrB(47);icd(13);mdh(36);purA(28);recA(29)
+
 === ENA Metadata ===
   country:             Japan:Aichi
   collection_date:     1994
@@ -281,6 +288,38 @@ atb fetch --amr --genus Escherichia --amr-types amr,stress,virulence
 ```
 
 AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`
+
+### Query MLST (Multi-Locus Sequence Typing)
+
+MLST data covers 2.44M samples across 156 typing schemes. The data is included in the core metadata fetch.
+
+```bash
+# Get all STs for E. coli (high-quality only)
+atb mlst --species "Escherichia coli" --hq-only --limit 20
+
+# Find ST131 E. coli (a globally disseminated high-risk clone)
+atb mlst --species "Escherichia coli" --st 131 --hq-only
+
+# Query by MLST scheme name
+atb mlst --scheme salmonella --limit 50
+atb mlst --scheme ecoli_achtman_4 --limit 20
+
+# Only perfect MLST calls (all alleles matched exactly)
+atb mlst --species "Escherichia coli" --status PERFECT --limit 20
+
+# Find novel sequence types (new allele combinations)
+atb mlst --species "Salmonella enterica" --status NOVEL --limit 20
+
+# Combine with species and quality filters
+atb mlst --species "Klebsiella pneumoniae" --hq-only --status PERFECT --limit 50
+
+# Output as CSV
+atb mlst --species "Escherichia coli" --st 131 --format csv -o st131.csv
+```
+
+MLST output columns: `sample_accession`, `sylph_species`, `mlst_scheme`, `mlst_st`, `mlst_status`, `mlst_score`, `mlst_alleles`
+
+MLST status values: `PERFECT` (exact match), `NOVEL` (new combination), `OK` (partial), `MIXED`, `BAD`, `MISSING`, `NONE`
 
 ### Fetch the database
 
