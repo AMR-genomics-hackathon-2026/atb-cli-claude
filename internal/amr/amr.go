@@ -49,11 +49,59 @@ type Result struct {
 }
 
 // Query reads AMR data from dataDir, applies filters, and returns matching results.
-// When genera are specified, it reads only the relevant partition files (falling back
-// to the monolithic file per genus if no partition exists). When no genera are given,
-// it scans the full monolithic amrfinderplus.parquet.
+// For each genus, it tries (in order): SQLite index, parquet partition, monolithic file.
+// When no genera are given, it scans the full monolithic amrfinderplus.parquet.
 func Query(dataDir string, filters Filters) ([]Result, error) {
-	paths := resolvePaths(dataDir, filters.Genera)
+	// Try SQLite indexes first for each genus.
+	if len(filters.Genera) > 0 {
+		return queryWithIndexes(dataDir, filters)
+	}
+
+	// No genus filter — full parquet scan.
+	return queryParquet(dataDir, filters)
+}
+
+func queryWithIndexes(dataDir string, filters Filters) ([]Result, error) {
+	var results []Result
+	remaining := filters.Limit
+
+	for _, genus := range filters.Genera {
+		var genusResults []Result
+		var err error
+
+		genusFilters := filters
+		genusFilters.Genera = []string{genus}
+		if remaining > 0 {
+			genusFilters.Limit = remaining
+		}
+
+		if idxPath := IndexPath(dataDir, genus); idxPath != "" {
+			genusResults, err = QueryIndex(idxPath, genusFilters)
+		} else {
+			genusResults, err = queryParquetForGenera(dataDir, []string{genus}, genusFilters)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, genusResults...)
+		if remaining > 0 {
+			remaining -= len(genusResults)
+			if remaining <= 0 {
+				break
+			}
+		}
+	}
+
+	return results, nil
+}
+
+func queryParquet(dataDir string, filters Filters) ([]Result, error) {
+	return queryParquetForGenera(dataDir, filters.Genera, filters)
+}
+
+func queryParquetForGenera(dataDir string, genera []string, filters Filters) ([]Result, error) {
+	paths := resolvePaths(dataDir, genera)
 
 	var results []Result
 	remaining := filters.Limit

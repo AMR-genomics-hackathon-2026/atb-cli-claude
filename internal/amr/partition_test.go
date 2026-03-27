@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	parquetgo "github.com/parquet-go/parquet-go"
@@ -134,10 +135,10 @@ func TestBuildPartitionsAllBelowThreshold(t *testing.T) {
 		t.Errorf("expected 300 rows in _other, got %d", len(otherRows))
 	}
 
-	// No genus-specific files should exist
+	// No genus-specific files should exist (only _other.parquet and _other.sqlite)
 	entries, _ := os.ReadDir(filepath.Join(dir, amr.PartitionDir))
 	for _, e := range entries {
-		if e.Name() != "_other.parquet" {
+		if !strings.HasPrefix(e.Name(), "_other.") {
 			t.Errorf("unexpected partition file: %s", e.Name())
 		}
 	}
@@ -208,5 +209,77 @@ func TestPartitionPathNormalization(t *testing.T) {
 	path := amr.PartitionPath(dir, "Nonexistent")
 	if path != "" {
 		t.Errorf("PartitionPath(Nonexistent) should be empty, got %q", path)
+	}
+}
+
+func TestQueryUsesSQLiteIndex(t *testing.T) {
+	dir := t.TempDir()
+	generateTestParquet(t, dir, map[string]int{
+		"Escherichia": 15_000,
+	})
+
+	if err := amr.BuildPartitions(dir, nil); err != nil {
+		t.Fatalf("BuildPartitions: %v", err)
+	}
+
+	// Verify SQLite index was created
+	idxPath := amr.IndexPath(dir, "Escherichia")
+	if idxPath == "" {
+		t.Fatal("expected SQLite index for Escherichia, got none")
+	}
+
+	// Query via SQLite (happens automatically since index exists)
+	results, err := amr.Query(dir, amr.Filters{
+		Genera: []string{"Escherichia"},
+		Class:  "BETA-LACTAM",
+		Limit:  5,
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 5 {
+		t.Errorf("expected 5 results, got %d", len(results))
+	}
+	for _, r := range results {
+		if r.Genus != "Escherichia" {
+			t.Errorf("expected genus Escherichia, got %q", r.Genus)
+		}
+		if !strings.Contains(strings.ToUpper(r.Class), "BETA-LACTAM") {
+			t.Errorf("expected class containing BETA-LACTAM, got %q", r.Class)
+		}
+	}
+}
+
+func TestQuerySQLiteMatchesParquet(t *testing.T) {
+	dir := t.TempDir()
+	generateTestParquet(t, dir, map[string]int{
+		"Escherichia": 15_000,
+	})
+
+	// Query without indexes (parquet only)
+	parquetResults, err := amr.Query(dir, amr.Filters{
+		Genera: []string{"Escherichia"},
+		Class:  "BETA-LACTAM",
+	})
+	if err != nil {
+		t.Fatalf("parquet query: %v", err)
+	}
+
+	// Build indexes
+	if err := amr.BuildPartitions(dir, nil); err != nil {
+		t.Fatalf("BuildPartitions: %v", err)
+	}
+
+	// Query with indexes (SQLite)
+	sqliteResults, err := amr.Query(dir, amr.Filters{
+		Genera: []string{"Escherichia"},
+		Class:  "BETA-LACTAM",
+	})
+	if err != nil {
+		t.Fatalf("sqlite query: %v", err)
+	}
+
+	if len(parquetResults) != len(sqliteResults) {
+		t.Errorf("result count mismatch: parquet=%d, sqlite=%d", len(parquetResults), len(sqliteResults))
 	}
 }

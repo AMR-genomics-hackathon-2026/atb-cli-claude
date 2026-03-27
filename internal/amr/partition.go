@@ -125,6 +125,11 @@ func BuildPartitions(dataDir string, logFn func(string, ...any)) error {
 	elapsed := time.Since(start).Truncate(time.Millisecond)
 	logFn("Partitioned %s rows into %d files (%s)", formatCount(written), len(writers), elapsed)
 
+	// Build SQLite indexes for each partition in parallel.
+	if err := BuildIndexes(dataDir, logFn); err != nil {
+		return fmt.Errorf("building indexes: %w", err)
+	}
+
 	return nil
 }
 
