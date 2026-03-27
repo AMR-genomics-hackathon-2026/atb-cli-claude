@@ -17,30 +17,11 @@ func fixturesDir(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "testdata", "fixtures")
 }
 
-func TestReadGenusParts(t *testing.T) {
-	genusDir := filepath.Join(fixturesDir(t), "amr", "amr_by_genus", "Genus=Escherichia")
-	rows, err := amr.ReadGenusParts(genusDir)
-	if err != nil {
-		t.Fatalf("ReadGenusParts: %v", err)
-	}
-	if len(rows) != 10 {
-		t.Errorf("expected 10 rows, got %d", len(rows))
-	}
-	// Verify first row has expected columns populated
-	first := rows[0]
-	if first.Name == "" {
-		t.Error("expected non-empty Name")
-	}
-	if first.GeneSymbol == "" {
-		t.Error("expected non-empty GeneSymbol")
-	}
-	if first.Class == "" {
-		t.Error("expected non-empty Class")
-	}
-}
-
 func TestQueryAMRByGenus(t *testing.T) {
-	results, err := amr.Query(fixturesDir(t), "Escherichia", "AMR", amr.Filters{})
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		Genus:       "Escherichia",
+		ElementType: "AMR",
+	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
@@ -51,6 +32,25 @@ func TestQueryAMRByGenus(t *testing.T) {
 		if r.SampleAccession == "" {
 			t.Error("expected non-empty SampleAccession")
 		}
+		if r.ElementType != "AMR" {
+			t.Errorf("expected ElementType=AMR, got %q", r.ElementType)
+		}
+	}
+}
+
+func TestQueryAMRAllRows(t *testing.T) {
+	results, err := amr.Query(fixturesDir(t), amr.Filters{})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	// 10 AMR + 5 STRESS = 15 rows total
+	if len(results) != 15 {
+		t.Errorf("expected 15 rows, got %d", len(results))
+	}
+	// Verify Genus field is populated
+	first := results[0]
+	if first.Genus == "" {
+		t.Error("expected non-empty Genus")
 	}
 }
 
@@ -59,7 +59,7 @@ func TestQueryAMRFilterBySamples(t *testing.T) {
 		"SAMN00000001": {},
 		"SAMN00000002": {},
 	}
-	results, err := amr.Query(fixturesDir(t), "Escherichia", "AMR", amr.Filters{
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
 		Samples: wanted,
 	})
 	if err != nil {
@@ -76,7 +76,7 @@ func TestQueryAMRFilterBySamples(t *testing.T) {
 }
 
 func TestQueryAMRFilterByClass(t *testing.T) {
-	results, err := amr.Query(fixturesDir(t), "Escherichia", "AMR", amr.Filters{
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
 		Class: "EFFLUX",
 	})
 	if err != nil {
@@ -94,7 +94,7 @@ func TestQueryAMRFilterByClass(t *testing.T) {
 
 func TestQueryAMRFilterByGenePattern(t *testing.T) {
 	// Pattern "bla%" should match blaTEM-1, blaEC, blaOXA-1, blaCTX-M-15
-	results, err := amr.Query(fixturesDir(t), "Escherichia", "AMR", amr.Filters{
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
 		GenePattern: "bla%",
 	})
 	if err != nil {
@@ -112,7 +112,7 @@ func TestQueryAMRFilterByGenePattern(t *testing.T) {
 }
 
 func TestQueryAMRFilterByMinCoverage(t *testing.T) {
-	results, err := amr.Query(fixturesDir(t), "Escherichia", "AMR", amr.Filters{
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
 		MinCoverage: 99.0,
 	})
 	if err != nil {
@@ -126,7 +126,9 @@ func TestQueryAMRFilterByMinCoverage(t *testing.T) {
 }
 
 func TestQueryStress(t *testing.T) {
-	results, err := amr.Query(fixturesDir(t), "Escherichia", "STRESS", amr.Filters{})
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		ElementType: "STRESS",
+	})
 	if err != nil {
 		t.Fatalf("Query stress: %v", err)
 	}
@@ -141,12 +143,43 @@ func TestQueryStress(t *testing.T) {
 }
 
 func TestQueryAll(t *testing.T) {
-	results, err := amr.Query(fixturesDir(t), "Escherichia", "all", amr.Filters{})
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		ElementType: "all",
+	})
 	if err != nil {
 		t.Fatalf("Query all: %v", err)
 	}
-	// 10 AMR + 5 stress = 15 (virulence dir doesn't exist; ReadGenusParts returns 0 rows for missing dir)
-	if len(results) < 10 {
-		t.Errorf("expected at least 10 results from 'all' query, got %d", len(results))
+	// "all" element type filter passes everything through
+	if len(results) < 15 {
+		t.Errorf("expected at least 15 results from 'all' query, got %d", len(results))
+	}
+}
+
+func TestQueryFilterByGenus(t *testing.T) {
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		Genus: "Escherichia",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 15 {
+		t.Errorf("expected 15 results for Escherichia, got %d", len(results))
+	}
+	for _, r := range results {
+		if r.Genus != "Escherichia" {
+			t.Errorf("expected Genus=Escherichia, got %q", r.Genus)
+		}
+	}
+}
+
+func TestQueryFilterByGenusNoMatch(t *testing.T) {
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		Genus: "Klebsiella",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for Klebsiella, got %d", len(results))
 	}
 }
