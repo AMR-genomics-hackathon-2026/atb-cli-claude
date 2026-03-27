@@ -21,28 +21,33 @@ func newFetchCmd() *cobra.Command {
 		fetchAMR bool
 		genera   []string
 		amrTypes []string
+		noAMR    bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "fetch",
 		Short: "Download ATB parquet metadata tables",
-		Long: `Download parquet metadata tables from AllTheBacteria.
+		Long: `Download parquet metadata tables and AMR data from AllTheBacteria.
 
-By default only the five core tables are downloaded:
-  assembly, assembly_stats, checkm2, sylph, run
+By default the core tables plus all AMR data (amr, stress, virulence
+for every genus) are downloaded.
 
-Use --all to download all ten available tables.
+Use --all to download all ten available tables plus AMR data.
+Use --no-amr to skip AMR data download.
 Use --tables to specify exact tables by name.`,
-		Example: `  # Download core metadata tables (~540 MB)
+		Example: `  # Download core tables + all AMR data
   atb fetch
 
-  # Download all tables including ENA metadata (~3 GB)
+  # Download all tables including ENA metadata + AMR data
   atb fetch --all
 
-  # Download AMR data for a specific genus
+  # Download core tables only (skip AMR)
+  atb fetch --no-amr
+
+  # Download AMR data for a specific genus only
   atb fetch --amr --genus Escherichia
 
-  # Download AMR + stress + virulence data
+  # Download AMR + stress + virulence data for a genus
   atb fetch --amr --genus Escherichia --amr-types amr,stress,virulence
 
   # Force re-download
@@ -147,6 +152,19 @@ Use --tables to specify exact tables by name.`,
 
 			fmt.Fprintf(os.Stderr, "All tables downloaded successfully.\n")
 
+			// Fetch all AMR data unless --no-amr is set
+			if !noAMR {
+				fmt.Fprintf(os.Stderr, "Fetching all AMR data (amr, stress, virulence)...\n")
+				logf := func(format string, args ...any) {
+					fmt.Fprintf(os.Stderr, format+"\n", args...)
+				}
+				if err := f.FetchAllAMR(fetch.AllAMRTypes, force, logf); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: AMR fetch encountered errors: %v\n", err)
+				} else {
+					fmt.Fprintf(os.Stderr, "All AMR data downloaded successfully.\n")
+				}
+			}
+
 			// Auto-build the SQLite index after a successful fetch.
 			fmt.Fprintf(os.Stderr, "Building query index...\n")
 			stderrLog := func(format string, args ...any) {
@@ -163,7 +181,8 @@ Use --tables to specify exact tables by name.`,
 	cmd.Flags().StringSliceVar(&tables, "tables", nil, "specific tables to download (comma-separated names)")
 	cmd.Flags().BoolVar(&force, "force", false, "re-download even if table already exists")
 	cmd.Flags().IntVar(&parallel, "parallel", 0, "parallel downloads (default from config)")
-	cmd.Flags().BoolVar(&fetchAMR, "amr", false, "fetch AMR gene data from GitHub")
+	cmd.Flags().BoolVar(&noAMR, "no-amr", false, "skip AMR data download")
+	cmd.Flags().BoolVar(&fetchAMR, "amr", false, "fetch AMR gene data from GitHub (specific genus)")
 	cmd.Flags().StringSliceVar(&genera, "genus", nil, "genus (or genera) to fetch AMR data for (comma-separated)")
 	cmd.Flags().StringSliceVar(&amrTypes, "amr-types", nil, "AMR types to fetch: amr,stress,virulence (default: amr)")
 

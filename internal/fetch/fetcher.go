@@ -1,17 +1,25 @@
 package fetch
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 // amrBaseURL is the root of Hive-partitioned AMR parquet files on GitHub.
 const amrBaseURL = "https://raw.githubusercontent.com/immem-hackathon-2025/atb-amr-shiny/main/data"
+
+// amrAPIBase is the GitHub Contents API for listing genera directories.
+const amrAPIBase = "https://api.github.com/repos/immem-hackathon-2025/atb-amr-shiny/contents/data"
+
+// AllAMRTypes lists every element-type directory in the AMR dataset.
+var AllAMRTypes = []string{"amr", "stress", "virulence"}
 
 // tableURLs maps parquet table filenames to their OSF download URLs.
 // Source: https://osf.io/h7wzy/files/osfstorage
@@ -195,5 +203,71 @@ func (f *Fetcher) FetchAMRGenus(genus string, elementTypes []string, force bool)
 		}
 	}
 
+	return nil
+}
+
+// ghEntry is the minimal JSON shape returned by the GitHub Contents API.
+type ghEntry struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// ListAMRGenera queries the GitHub API to discover all genus directories
+// under a given element type (e.g. "amr_by_genus"). Directory names have the
+// form "Genus=Escherichia"; this function returns just the genus part.
+func (f *Fetcher) ListAMRGenera(elementType string) ([]string, error) {
+	dirName := elementType + "_by_genus"
+	apiURL := fmt.Sprintf("%s/%s", amrAPIBase, dirName)
+
+	var genera []string
+	for page := 1; ; page++ {
+		reqURL := fmt.Sprintf("%s?per_page=100&page=%d", apiURL, page)
+		resp, err := f.client.Get(reqURL)
+		if err != nil {
+			return nil, fmt.Errorf("listing genera for %s: %w", elementType, err)
+		}
+
+		var entries []ghEntry
+		if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("decoding genera list for %s: %w", elementType, err)
+		}
+		resp.Body.Close()
+
+		for _, e := range entries {
+			if e.Type != "dir" {
+				continue
+			}
+			if g, ok := strings.CutPrefix(e.Name, "Genus="); ok {
+				genera = append(genera, g)
+			}
+		}
+
+		if len(entries) < 100 {
+			break
+		}
+	}
+	return genera, nil
+}
+
+// FetchAllAMR discovers every genus for each element type and downloads all
+// partitions. It calls logf to report progress. Existing files are skipped
+// unless force is true.
+func (f *Fetcher) FetchAllAMR(types []string, force bool, logf func(string, ...any)) error {
+	for _, et := range types {
+		logf("Listing genera for %s...", et)
+		genera, err := f.ListAMRGenera(et)
+		if err != nil {
+			return err
+		}
+		logf("Found %d genera for %s", len(genera), et)
+
+		for i, genus := range genera {
+			logf("  [%d/%d] fetching %s/%s", i+1, len(genera), et, genus)
+			if err := f.FetchAMRGenus(genus, []string{et}, force); err != nil {
+				logf("  warning: %s/%s: %v", et, genus, err)
+			}
+		}
+	}
 	return nil
 }
