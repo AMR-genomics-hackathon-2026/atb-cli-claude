@@ -209,8 +209,8 @@ Output:
 ```bash
 # Query, then download
 atb query --species "Klebsiella pneumoniae" --hq-only --limit 10 \
-  --columns sample_accession,aws_url -o results.tsv
-atb download --from results.tsv --output-dir ./genomes
+  --columns sample_accession,aws_url --format csv -o results.csv
+atb download --from results.csv --output-dir ./genomes
 
 # Pipe query directly to download
 atb query --species "Escherichia coli" --hq-only --limit 5 \
@@ -218,7 +218,7 @@ atb query --species "Escherichia coli" --hq-only --limit 5 \
   atb download --from - --output-dir ./ecoli_genomes
 
 # Preview what would be downloaded
-atb download --from results.tsv --dry-run
+atb download --from results.csv --dry-run
 
 # Download from a URL list
 atb download --urls my_urls.txt --output-dir ./genomes --parallel 8
