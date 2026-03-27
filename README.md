@@ -31,7 +31,7 @@ Download the file for your platform, extract, and place the `atb` binary (or `at
 curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
 ```
 
-This detects your OS and architecture, downloads the latest release, and installs to `/usr/local/bin`.
+This detects your OS and architecture, downloads the latest release, and installs to `~/.local/bin`. It will add the directory to your `PATH` automatically if needed.
 
 ```bash
 # Install a specific version
