@@ -38,7 +38,14 @@ func newUpdateCmd() *cobra.Command {
 				return nil
 			}
 
-			fmt.Fprintf(w, "New version available: %s\n\n", release.TagName)
+			fmt.Fprintf(w, "New version available: %s\n", release.TagName)
+			if release.Body != "" {
+				fmt.Fprintf(w, "\nChangelog:\n")
+				for _, line := range strings.Split(strings.TrimSpace(release.Body), "\n") {
+					fmt.Fprintf(w, "  %s\n", line)
+				}
+			}
+			fmt.Fprintf(w, "\n")
 
 			asset := selfupdate.FindAsset(release)
 			if asset == nil {

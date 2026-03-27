@@ -17,8 +17,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("General.DataDir = %q, want %q", cfg.General.DataDir, wantDataDir)
 	}
 
-	if cfg.General.DefaultFormat != "auto" {
-		t.Errorf("General.DefaultFormat = %q, want %q", cfg.General.DefaultFormat, "auto")
+	if cfg.General.DefaultFormat != "tsv" {
+		t.Errorf("General.DefaultFormat = %q, want %q", cfg.General.DefaultFormat, "tsv")
 	}
 
 	if cfg.Fetch.Parallel != 4 {

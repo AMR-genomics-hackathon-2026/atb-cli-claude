@@ -67,7 +67,7 @@ func Default() Config {
 	return Config{
 		General: GeneralConfig{
 			DataDir:       DefaultDataDir(),
-			DefaultFormat: "auto",
+			DefaultFormat: "tsv",
 		},
 		Fetch: FetchConfig{
 			BaseURL:  "https://ftp.ebi.ac.uk/pub/databases/AllTheBacteria",

@@ -22,6 +22,7 @@ const (
 type Release struct {
 	TagName string  `json:"tag_name"`
 	HTMLURL string  `json:"html_url"`
+	Body    string  `json:"body"`
 	Assets  []Asset `json:"assets"`
 }
 
@@ -33,6 +34,8 @@ type Asset struct {
 type UpdateState struct {
 	LastChecked   time.Time `json:"last_checked"`
 	LatestVersion string    `json:"latest_version"`
+	ReleaseNotes  string    `json:"release_notes,omitempty"`
+	ReleaseURL    string    `json:"release_url,omitempty"`
 	NotifiedUser  bool      `json:"notified_user"`
 }
 
@@ -250,8 +253,7 @@ func CheckInBackground(currentVersion string, w io.Writer) {
 	if time.Since(state.LastChecked) < checkInterval {
 		// Already checked recently, just show notice if we found one
 		if state.LatestVersion != "" && CompareVersions(currentVersion, state.LatestVersion) && !state.NotifiedUser {
-			fmt.Fprintf(w, "\n  A new version of atb is available: %s (current: %s)\n", state.LatestVersion, currentVersion)
-			fmt.Fprintf(w, "  Run 'atb update' to upgrade.\n\n")
+			printUpdateNotice(w, currentVersion, state)
 			state.NotifiedUser = true
 			saveState(state)
 		}
@@ -266,7 +268,23 @@ func CheckInBackground(currentVersion string, w io.Writer) {
 		}
 		state.LastChecked = time.Now()
 		state.LatestVersion = release.TagName
+		state.ReleaseNotes = release.Body
+		state.ReleaseURL = release.HTMLURL
 		state.NotifiedUser = false
 		saveState(state)
 	}()
+}
+
+func printUpdateNotice(w io.Writer, currentVersion string, state UpdateState) {
+	fmt.Fprintf(w, "\n  A new version of atb is available: %s (current: %s)\n", state.LatestVersion, currentVersion)
+	if state.ReleaseNotes != "" {
+		fmt.Fprintf(w, "\n  What's new:\n")
+		for _, line := range strings.Split(strings.TrimSpace(state.ReleaseNotes), "\n") {
+			fmt.Fprintf(w, "    %s\n", line)
+		}
+	}
+	if state.ReleaseURL != "" {
+		fmt.Fprintf(w, "\n  Release: %s\n", state.ReleaseURL)
+	}
+	fmt.Fprintf(w, "\n  Run 'atb update' to upgrade.\n\n")
 }
