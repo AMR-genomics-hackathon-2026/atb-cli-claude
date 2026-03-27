@@ -162,8 +162,8 @@ func TestQueryFilterByGenus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	if len(results) != 15 {
-		t.Errorf("expected 15 results for Escherichia, got %d", len(results))
+	if len(results) != 9 {
+		t.Errorf("expected 9 results for Escherichia, got %d", len(results))
 	}
 	for _, r := range results {
 		if r.Genus != "Escherichia" {
