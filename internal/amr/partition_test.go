@@ -283,3 +283,32 @@ func TestQuerySQLiteMatchesParquet(t *testing.T) {
 		t.Errorf("result count mismatch: parquet=%d, sqlite=%d", len(parquetResults), len(sqliteResults))
 	}
 }
+
+func TestQuerySQLiteWithLargeSampleSet(t *testing.T) {
+	dir := t.TempDir()
+	generateTestParquet(t, dir, map[string]int{
+		"Escherichia": 15_000,
+	})
+
+	if err := amr.BuildPartitions(dir, nil); err != nil {
+		t.Fatalf("BuildPartitions: %v", err)
+	}
+
+	// Build a large sample set (simulates --hq-only with thousands of samples)
+	samples := make(map[string]struct{}, 5000)
+	for i := 0; i < 5000; i++ {
+		samples[fmt.Sprintf("SAMN%08d", i)] = struct{}{}
+	}
+
+	results, err := amr.Query(dir, amr.Filters{
+		Genera:  []string{"Escherichia"},
+		Samples: samples,
+		Limit:   10,
+	})
+	if err != nil {
+		t.Fatalf("Query with large sample set failed: %v", err)
+	}
+	if len(results) > 10 {
+		t.Errorf("expected at most 10 results, got %d", len(results))
+	}
+}

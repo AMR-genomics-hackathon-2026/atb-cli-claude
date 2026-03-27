@@ -193,11 +193,38 @@ func IndexPath(dataDir, genus string) string {
 
 // QueryIndex runs a SQL query against a genus SQLite index and returns results.
 func QueryIndex(dbPath string, filters Filters) ([]Result, error) {
-	db, err := sql.Open("sqlite", dbPath+"?mode=ro")
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
+
+	// For large sample sets, load them into a temp table to avoid SQLite variable limits.
+	if len(filters.Samples) > 0 {
+		if _, err := db.Exec("CREATE TEMP TABLE _samples (name TEXT PRIMARY KEY)"); err != nil {
+			return nil, fmt.Errorf("creating temp table: %w", err)
+		}
+		tx, err := db.Begin()
+		if err != nil {
+			return nil, err
+		}
+		stmt, err := tx.Prepare("INSERT OR IGNORE INTO _samples (name) VALUES (?)")
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+		for s := range filters.Samples {
+			if _, err := stmt.Exec(s); err != nil {
+				_ = stmt.Close()
+				_ = tx.Rollback()
+				return nil, err
+			}
+		}
+		_ = stmt.Close()
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+	}
 
 	query, args := buildSQL(filters)
 	rows, err := db.Query(query, args...)
@@ -227,12 +254,7 @@ func buildSQL(f Filters) (string, []any) {
 	var args []any
 
 	if len(f.Samples) > 0 {
-		placeholders := make([]string, 0, len(f.Samples))
-		for s := range f.Samples {
-			placeholders = append(placeholders, "?")
-			args = append(args, s)
-		}
-		clauses = append(clauses, "name IN ("+strings.Join(placeholders, ",")+")")
+		clauses = append(clauses, "name IN (SELECT name FROM _samples)")
 	}
 	if f.Class != "" {
 		clauses = append(clauses, "UPPER(class) LIKE ?")
