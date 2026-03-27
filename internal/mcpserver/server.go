@@ -15,7 +15,7 @@ import (
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 )
 
-// NewServer creates and configures an MCP server with all 5 ATB tools.
+// NewServer creates and configures an MCP server with all ATB tools.
 func NewServer(dataDir string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    "atb",
@@ -46,6 +46,11 @@ func NewServer(dataDir string) *mcp.Server {
 		Name:        "atb_species_list",
 		Description: "List available species in the database sorted by sample count",
 	}, makeSpeciesListHandler(dataDir))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "atb_mlst",
+		Description: "Query MLST (Multi-Locus Sequence Typing) data for bacterial genomes",
+	}, makeMLSTHandler(dataDir))
 
 	return s
 }
@@ -342,5 +347,56 @@ func makeSpeciesListHandler(dataDir string) mcp.ToolHandlerFor[speciesListInput,
 			list = []idx.SpeciesCount{}
 		}
 		return textResult(list)
+	}
+}
+
+// --- atb_mlst ---
+
+type mlstInput struct {
+	Species      string `json:"species,omitempty"       jsonschema:"Species name filter (case-insensitive)"`
+	SequenceType string `json:"sequence_type,omitempty" jsonschema:"Sequence type (ST) number to filter by"`
+	Scheme       string `json:"scheme,omitempty"        jsonschema:"MLST scheme name filter"`
+	MLSTStatus   string `json:"mlst_status,omitempty"   jsonschema:"MLST status filter: PERFECT, NOVEL, OK, MIXED, BAD, NONE, MISSING"`
+	HQOnly       bool   `json:"hq_only,omitempty"       jsonschema:"Only include high-quality genomes"`
+	Limit        int    `json:"limit,omitempty"         jsonschema:"Maximum results to return (default 50)"`
+}
+
+func makeMLSTHandler(dataDir string) mcp.ToolHandlerFor[mlstInput, any] {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in mlstInput) (*mcp.CallToolResult, any, error) {
+		db, err := idx.Open(dataDir)
+		if err != nil {
+			return errorResult(fmt.Sprintf("failed to open index: %v", err))
+		}
+		defer db.Close()
+
+		limit := in.Limit
+		if limit <= 0 {
+			limit = 50
+		}
+
+		rows, err := db.Query(idx.QueryParams{
+			Species:      in.Species,
+			HQOnly:       in.HQOnly,
+			SequenceType: in.SequenceType,
+			Scheme:       in.Scheme,
+			MLSTStatus:   in.MLSTStatus,
+			Columns: []string{
+				"sample_accession",
+				"sylph_species",
+				"mlst_scheme",
+				"mlst_st",
+				"mlst_status",
+				"mlst_score",
+				"mlst_alleles",
+			},
+			Limit: limit,
+		})
+		if err != nil {
+			return errorResult(fmt.Sprintf("MLST query failed: %v", err))
+		}
+		if rows == nil {
+			rows = []map[string]string{}
+		}
+		return textResult(rows)
 	}
 }
