@@ -56,3 +56,40 @@ func ReadFiltered[T any](path string, fn func(T) bool) ([]T, error) {
 
 	return result, nil
 }
+
+// ReadStreamFiltered reads rows from a parquet file, applying the predicate
+// during deserialization and returning only matching rows. If limit > 0,
+// reading stops as soon as limit matching rows have been collected.
+func ReadStreamFiltered[T any](path string, fn func(T) bool, limit int) ([]T, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening parquet file %q: %w", path, err)
+	}
+	defer f.Close()
+
+	r := parquetgo.NewGenericReader[T](f)
+	defer r.Close()
+
+	var results []T
+	buf := make([]T, 512)
+
+	for {
+		n, err := r.Read(buf)
+		for i := 0; i < n; i++ {
+			if fn(buf[i]) {
+				results = append(results, buf[i])
+				if limit > 0 && len(results) >= limit {
+					return results, nil
+				}
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading parquet file %q: %w", path, err)
+		}
+	}
+
+	return results, nil
+}

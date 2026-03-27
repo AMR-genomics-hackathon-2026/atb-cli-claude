@@ -79,12 +79,12 @@ Run 'atb fetch' to download the data before querying.`,
 			var sampleSet map[string]struct{}
 			if hqOnly {
 				assemblyPath := filepath.Join(dir, "assembly.parquet")
-				hqRows, hqErr := pq.ReadFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
+				hqRows, hqErr := pq.ReadStreamFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
 					if r.HQFilter != "PASS" {
 						return false
 					}
 					return strings.EqualFold(pq.GenusFromSpecies(r.SylphSpecies), genus)
-				})
+				}, 0)
 				if hqErr != nil {
 					return fmt.Errorf("loading HQ samples: %w", hqErr)
 				}
@@ -102,16 +102,12 @@ Run 'atb fetch' to download the data before querying.`,
 				MinIdentity: minIdentity,
 				ElementType: elementType,
 				Genus:       genus,
+				Limit:       limit,
 			}
 
 			results, err := amr.Query(dir, filters)
 			if err != nil {
 				return fmt.Errorf("AMR query failed: %w", err)
-			}
-
-			// Apply limit
-			if limit > 0 && limit < len(results) {
-				results = results[:limit]
 			}
 
 			rows := amrResultsToOutputRows(results)

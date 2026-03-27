@@ -28,6 +28,8 @@ type Filters struct {
 	ElementType string
 	// Genus restricts results to a specific bacterial genus (case-insensitive). Empty means all.
 	Genus string
+	// Limit caps the number of returned results. 0 means no limit.
+	Limit int
 }
 
 // Result is a single AMR gene hit associated with a sample.
@@ -49,9 +51,9 @@ type Result struct {
 func Query(dataDir string, filters Filters) ([]Result, error) {
 	amrPath := filepath.Join(dataDir, AMRFileName)
 
-	rows, err := pq.ReadFiltered[pq.AMRRow](amrPath, func(row pq.AMRRow) bool {
+	rows, err := pq.ReadStreamFiltered[pq.AMRRow](amrPath, func(row pq.AMRRow) bool {
 		return matchesFilters(row, filters)
-	})
+	}, filters.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", AMRFileName, err)
 	}

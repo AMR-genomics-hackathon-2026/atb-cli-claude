@@ -183,3 +183,39 @@ func TestQueryFilterByGenusNoMatch(t *testing.T) {
 		t.Errorf("expected 0 results for Klebsiella, got %d", len(results))
 	}
 }
+
+func TestQueryWithLimit(t *testing.T) {
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		Genus: "Escherichia",
+		Limit: 3,
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 3 {
+		t.Errorf("expected 3 results with limit=3, got %d", len(results))
+	}
+}
+
+func TestQueryWithLimitExceedingResults(t *testing.T) {
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		Genus: "Escherichia",
+		Limit: 100,
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 9 {
+		t.Errorf("expected 9 results (limit exceeds matches), got %d", len(results))
+	}
+}
+
+func TestQueryWithZeroLimitReturnsAll(t *testing.T) {
+	results, err := amr.Query(fixturesDir(t), amr.Filters{})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 15 {
+		t.Errorf("expected 15 rows with no limit, got %d", len(results))
+	}
+}
