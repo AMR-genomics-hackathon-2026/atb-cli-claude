@@ -38,6 +38,10 @@ func newMLSTCmd() *cobra.Command {
   # Only perfect MLST calls
   atb mlst --species "Escherichia coli" --status PERFECT --limit 20`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
+				return cmd.Help()
+			}
+
 			cfg, err := loadConfig()
 			if err != nil {
 				return err

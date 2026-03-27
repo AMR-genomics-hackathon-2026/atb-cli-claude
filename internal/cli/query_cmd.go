@@ -72,6 +72,10 @@ func newQueryCmd() *cobra.Command {
   # Output as CSV to a file
   atb query --species "Escherichia coli" --hq-only --format csv -o results.csv`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
+				return cmd.Help()
+			}
+
 			cfg, err := loadConfig()
 			if err != nil {
 				return err

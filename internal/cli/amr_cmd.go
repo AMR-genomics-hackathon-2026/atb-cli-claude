@@ -59,6 +59,10 @@ Run 'atb fetch' to download the data before querying.`,
   # Query all element types (AMR + stress + virulence)
   atb amr --species "Klebsiella pneumoniae" --type all --hq-only`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
+				return cmd.Help()
+			}
+
 			cfg, err := loadConfig()
 			if err != nil {
 				return err
