@@ -12,6 +12,11 @@ import (
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
 
+type readResult[T any] struct {
+	rows []T
+	err  error
+}
+
 const IndexFileName = "atb_index.sqlite"
 
 const createSchema = `
@@ -114,15 +119,56 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		return fmt.Errorf("creating schema: %w", err)
 	}
 
-	// Step 1: insert assembly rows.
+	// Step 1: Read assembly (must complete before inserts).
 	logf("reading assembly.parquet...")
 	assemblies, err := pq.ReadAll[pq.AssemblyRow](filepath.Join(dataDir, "assembly.parquet"))
 	if err != nil {
 		return fmt.Errorf("reading assembly: %w", err)
 	}
-	logf("inserting %d assembly rows...", len(assemblies))
 
-	if err := insertInBatches(db, insertAssembly, len(assemblies), func(stmt *sql.Stmt, i int) error {
+	// Step 2: Start reading secondary tables in parallel while assembly insert runs.
+	statsCh := make(chan readResult[pq.AssemblyStatsRow], 1)
+	checkm2Ch := make(chan readResult[pq.CheckM2Row], 1)
+	mlstCh := make(chan readResult[pq.MLSTRow], 1)
+
+	go func() {
+		path := filepath.Join(dataDir, "assembly_stats.parquet")
+		if _, err := os.Stat(path); err != nil {
+			statsCh <- readResult[pq.AssemblyStatsRow]{}
+			return
+		}
+		logf("reading assembly_stats.parquet...")
+		rows, err := pq.ReadAll[pq.AssemblyStatsRow](path)
+		statsCh <- readResult[pq.AssemblyStatsRow]{rows, err}
+	}()
+
+	go func() {
+		path := filepath.Join(dataDir, "checkm2.parquet")
+		if _, err := os.Stat(path); err != nil {
+			checkm2Ch <- readResult[pq.CheckM2Row]{}
+			return
+		}
+		logf("reading checkm2.parquet...")
+		rows, err := pq.ReadAll[pq.CheckM2Row](path)
+		checkm2Ch <- readResult[pq.CheckM2Row]{rows, err}
+	}()
+
+	go func() {
+		path := filepath.Join(dataDir, "mlst.parquet")
+		if _, err := os.Stat(path); err != nil {
+			mlstCh <- readResult[pq.MLSTRow]{}
+			return
+		}
+		logf("reading mlst.parquet...")
+		rows, err := pq.ReadAll[pq.MLSTRow](path)
+		mlstCh <- readResult[pq.MLSTRow]{rows, err}
+	}()
+
+	// Step 3: Insert assembly rows (secondary reads happen in background).
+	assemblyCount := len(assemblies)
+	logf("inserting %d assembly rows...", assemblyCount)
+
+	if err := insertInBatches(db, insertAssembly, assemblyCount, func(stmt *sql.Stmt, i int) error {
 		a := assemblies[i]
 		_, err := stmt.Exec(
 			a.SampleAccession, a.RunAccession, a.AssemblyAccession,
@@ -133,19 +179,17 @@ func Build(dataDir string, logf func(string, ...any)) error {
 	}); err != nil {
 		return fmt.Errorf("inserting assembly: %w", err)
 	}
+	assemblies = nil // free memory
 
-	// Step 2: update assembly_stats.
-	statsPath := filepath.Join(dataDir, "assembly_stats.parquet")
-	if _, statErr := os.Stat(statsPath); statErr == nil {
-		logf("reading assembly_stats.parquet...")
-		statsRows, err := pq.ReadAll[pq.AssemblyStatsRow](statsPath)
-		if err != nil {
-			return fmt.Errorf("reading assembly_stats: %w", err)
-		}
-		logf("updating %d assembly_stats rows...", len(statsRows))
-
-		if err := insertInBatches(db, updateStats, len(statsRows), func(stmt *sql.Stmt, i int) error {
-			s := statsRows[i]
+	// Step 4: Wait for secondary reads and apply updates sequentially.
+	statsResult := <-statsCh
+	if statsResult.err != nil {
+		return fmt.Errorf("reading assembly_stats: %w", statsResult.err)
+	}
+	if len(statsResult.rows) > 0 {
+		logf("updating %d assembly_stats rows...", len(statsResult.rows))
+		if err := insertInBatches(db, updateStats, len(statsResult.rows), func(stmt *sql.Stmt, i int) error {
+			s := statsResult.rows[i]
 			_, err := stmt.Exec(s.TotalLength, s.Number, s.N50, s.N90, s.SampleAccession)
 			return err
 		}); err != nil {
@@ -153,18 +197,14 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		}
 	}
 
-	// Step 3: update checkm2.
-	checkm2Path := filepath.Join(dataDir, "checkm2.parquet")
-	if _, statErr := os.Stat(checkm2Path); statErr == nil {
-		logf("reading checkm2.parquet...")
-		ckRows, err := pq.ReadAll[pq.CheckM2Row](checkm2Path)
-		if err != nil {
-			return fmt.Errorf("reading checkm2: %w", err)
-		}
-		logf("updating %d checkm2 rows...", len(ckRows))
-
-		if err := insertInBatches(db, updateCheckM2, len(ckRows), func(stmt *sql.Stmt, i int) error {
-			c := ckRows[i]
+	checkm2Result := <-checkm2Ch
+	if checkm2Result.err != nil {
+		return fmt.Errorf("reading checkm2: %w", checkm2Result.err)
+	}
+	if len(checkm2Result.rows) > 0 {
+		logf("updating %d checkm2 rows...", len(checkm2Result.rows))
+		if err := insertInBatches(db, updateCheckM2, len(checkm2Result.rows), func(stmt *sql.Stmt, i int) error {
+			c := checkm2Result.rows[i]
 			_, err := stmt.Exec(c.CompletenessGeneral, c.Contamination, c.GenomeSize, c.GCContent, c.SampleAccession)
 			return err
 		}); err != nil {
@@ -172,18 +212,14 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		}
 	}
 
-	// Step 4: update mlst.
-	mlstPath := filepath.Join(dataDir, "mlst.parquet")
-	if _, statErr := os.Stat(mlstPath); statErr == nil {
-		logf("reading mlst.parquet...")
-		mlstRows, err := pq.ReadAll[pq.MLSTRow](mlstPath)
-		if err != nil {
-			return fmt.Errorf("reading mlst: %w", err)
-		}
-		logf("updating %d mlst rows...", len(mlstRows))
-
-		if err := insertInBatches(db, updateMLST, len(mlstRows), func(stmt *sql.Stmt, i int) error {
-			m := mlstRows[i]
+	mlstResult := <-mlstCh
+	if mlstResult.err != nil {
+		return fmt.Errorf("reading mlst: %w", mlstResult.err)
+	}
+	if len(mlstResult.rows) > 0 {
+		logf("updating %d mlst rows...", len(mlstResult.rows))
+		if err := insertInBatches(db, updateMLST, len(mlstResult.rows), func(stmt *sql.Stmt, i int) error {
+			m := mlstResult.rows[i]
 			_, err := stmt.Exec(m.Scheme, m.ST, m.Status, m.Score, m.Alleles, m.Sample)
 			return err
 		}); err != nil {
@@ -204,7 +240,7 @@ func Build(dataDir string, logf func(string, ...any)) error {
 		return fmt.Errorf("renaming index: %w", err)
 	}
 
-	logf("index built in %s (%d samples)", time.Since(start).Round(time.Millisecond), len(assemblies))
+	logf("index built in %s (%d samples)", time.Since(start).Round(time.Millisecond), assemblyCount)
 	return nil
 }
 
