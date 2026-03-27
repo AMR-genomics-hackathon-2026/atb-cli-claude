@@ -156,8 +156,8 @@ func TestQueryUsesPartition(t *testing.T) {
 
 	// Query for a genus that has its own partition
 	results, err := amr.Query(dir, amr.Filters{
-		Genus: "Escherichia",
-		Limit: 10,
+		Genera: []string{"Escherichia"},
+		Limit:  10,
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -175,7 +175,7 @@ func TestQueryUsesPartition(t *testing.T) {
 func TestQueryFallsBackToMonolithic(t *testing.T) {
 	// Use fixture data (no partitions built)
 	results, err := amr.Query(fixturesDir(t), amr.Filters{
-		Genus: "Escherichia",
+		Genera: []string{"Escherichia"},
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)

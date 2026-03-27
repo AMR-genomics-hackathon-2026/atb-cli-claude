@@ -19,7 +19,7 @@ func fixturesDir(t *testing.T) string {
 
 func TestQueryAMRByGenus(t *testing.T) {
 	results, err := amr.Query(fixturesDir(t), amr.Filters{
-		Genus:       "Escherichia",
+		Genera:      []string{"Escherichia"},
 		ElementType: "AMR",
 	})
 	if err != nil {
@@ -157,7 +157,7 @@ func TestQueryAll(t *testing.T) {
 
 func TestQueryFilterByGenus(t *testing.T) {
 	results, err := amr.Query(fixturesDir(t), amr.Filters{
-		Genus: "Escherichia",
+		Genera: []string{"Escherichia"},
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -174,7 +174,7 @@ func TestQueryFilterByGenus(t *testing.T) {
 
 func TestQueryFilterByGenusNoMatch(t *testing.T) {
 	results, err := amr.Query(fixturesDir(t), amr.Filters{
-		Genus: "Klebsiella",
+		Genera: []string{"Klebsiella"},
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -186,8 +186,8 @@ func TestQueryFilterByGenusNoMatch(t *testing.T) {
 
 func TestQueryWithLimit(t *testing.T) {
 	results, err := amr.Query(fixturesDir(t), amr.Filters{
-		Genus: "Escherichia",
-		Limit: 3,
+		Genera: []string{"Escherichia"},
+		Limit:  3,
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -199,8 +199,8 @@ func TestQueryWithLimit(t *testing.T) {
 
 func TestQueryWithLimitExceedingResults(t *testing.T) {
 	results, err := amr.Query(fixturesDir(t), amr.Filters{
-		Genus: "Escherichia",
-		Limit: 100,
+		Genera: []string{"Escherichia"},
+		Limit:  100,
 	})
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -217,5 +217,55 @@ func TestQueryWithZeroLimitReturnsAll(t *testing.T) {
 	}
 	if len(results) != 15 {
 		t.Errorf("expected 15 rows with no limit, got %d", len(results))
+	}
+}
+
+func TestQueryMultipleGenera(t *testing.T) {
+	// First discover what genera exist in fixture data
+	all, err := amr.Query(fixturesDir(t), amr.Filters{})
+	if err != nil {
+		t.Fatalf("Query all: %v", err)
+	}
+	genusCounts := make(map[string]int)
+	for _, r := range all {
+		genusCounts[r.Genus]++
+	}
+
+	// Query for Escherichia + Staphylococcus
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		Genera: []string{"Escherichia", "Staphylococcus"},
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+
+	expected := genusCounts["Escherichia"] + genusCounts["Staphylococcus"]
+	if len(results) != expected {
+		t.Errorf("expected %d results for both genera, got %d", expected, len(results))
+	}
+
+	// Verify only requested genera are returned
+	for _, r := range results {
+		if r.Genus != "Escherichia" && r.Genus != "Staphylococcus" {
+			t.Errorf("unexpected genus %q in results", r.Genus)
+		}
+	}
+}
+
+func TestQueryNoGenusWithGeneFilter(t *testing.T) {
+	// Search for a gene across all genera (no Genera filter)
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		GenePattern: "bla%",
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected results for gene bla% across all genera")
+	}
+	for _, r := range results {
+		if len(r.GeneSymbol) < 3 || r.GeneSymbol[:3] != "bla" {
+			t.Errorf("gene %q does not match bla%% pattern", r.GeneSymbol)
+		}
 	}
 }

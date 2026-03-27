@@ -26,8 +26,9 @@ type Filters struct {
 	MinIdentity float64
 	// ElementType restricts to a specific element type ("AMR", "STRESS", "VIRULENCE"). Empty means all.
 	ElementType string
-	// Genus restricts results to a specific bacterial genus (case-insensitive). Empty means all.
-	Genus string
+	// Genera restricts results to specific bacterial genera (case-insensitive).
+	// Nil or empty means all genera (full scan).
+	Genera []string
 	// Limit caps the number of returned results. 0 means no limit.
 	Limit int
 }
@@ -48,42 +49,73 @@ type Result struct {
 }
 
 // Query reads AMR data from dataDir, applies filters, and returns matching results.
-// If a genus partition file exists for the requested genus, it reads only that file.
-// Otherwise it falls back to the monolithic amrfinderplus.parquet.
+// When genera are specified, it reads only the relevant partition files (falling back
+// to the monolithic file per genus if no partition exists). When no genera are given,
+// it scans the full monolithic amrfinderplus.parquet.
 func Query(dataDir string, filters Filters) ([]Result, error) {
-	amrPath := filepath.Join(dataDir, AMRFileName)
+	paths := resolvePaths(dataDir, filters.Genera)
 
-	// Try genus partition first (much smaller file)
-	if filters.Genus != "" {
-		if partPath := PartitionPath(dataDir, filters.Genus); partPath != "" {
-			amrPath = partPath
+	var results []Result
+	remaining := filters.Limit
+
+	for _, amrPath := range paths {
+		rows, err := pq.ReadStreamFiltered[pq.AMRRow](amrPath, func(row pq.AMRRow) bool {
+			return matchesFilters(row, filters)
+		}, remaining)
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", filepath.Base(amrPath), err)
+		}
+
+		for _, row := range rows {
+			results = append(results, rowToResult(row))
+		}
+
+		if remaining > 0 {
+			remaining -= len(rows)
+			if remaining <= 0 {
+				break
+			}
 		}
 	}
 
-	rows, err := pq.ReadStreamFiltered[pq.AMRRow](amrPath, func(row pq.AMRRow) bool {
-		return matchesFilters(row, filters)
-	}, filters.Limit)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", filepath.Base(amrPath), err)
+	return results, nil
+}
+
+func resolvePaths(dataDir string, genera []string) []string {
+	if len(genera) == 0 {
+		return []string{filepath.Join(dataDir, AMRFileName)}
 	}
 
-	results := make([]Result, 0, len(rows))
-	for _, row := range rows {
-		results = append(results, Result{
-			SampleAccession: row.Name,
-			GeneSymbol:      row.GeneSymbol,
-			ElementType:     row.ElementType,
-			ElementSubtype:  row.ElementSubtype,
-			Coverage:        row.Coverage,
-			Identity:        row.Identity,
-			Method:          row.Method,
-			Class:           row.Class,
-			Subclass:        row.Subclass,
-			Species:         row.Species,
-			Genus:           row.Genus,
-		})
+	monolithic := filepath.Join(dataDir, AMRFileName)
+	usedMonolithic := false
+	var paths []string
+
+	for _, genus := range genera {
+		if partPath := PartitionPath(dataDir, genus); partPath != "" {
+			paths = append(paths, partPath)
+		} else if !usedMonolithic {
+			paths = append(paths, monolithic)
+			usedMonolithic = true
+		}
 	}
-	return results, nil
+
+	return paths
+}
+
+func rowToResult(row pq.AMRRow) Result {
+	return Result{
+		SampleAccession: row.Name,
+		GeneSymbol:      row.GeneSymbol,
+		ElementType:     row.ElementType,
+		ElementSubtype:  row.ElementSubtype,
+		Coverage:        row.Coverage,
+		Identity:        row.Identity,
+		Method:          row.Method,
+		Class:           row.Class,
+		Subclass:        row.Subclass,
+		Species:         row.Species,
+		Genus:           row.Genus,
+	}
 }
 
 func matchesFilters(row pq.AMRRow, f Filters) bool {
@@ -109,10 +141,19 @@ func matchesFilters(row pq.AMRRow, f Filters) bool {
 			return false
 		}
 	}
-	if f.Genus != "" && !strings.EqualFold(row.Genus, f.Genus) {
+	if len(f.Genera) > 0 && !matchesAnyGenus(row.Genus, f.Genera) {
 		return false
 	}
 	return true
+}
+
+func matchesAnyGenus(rowGenus string, genera []string) bool {
+	for _, g := range genera {
+		if strings.EqualFold(rowGenus, g) {
+			return true
+		}
+	}
+	return false
 }
 
 // matchesPattern performs a case-insensitive wildcard match using % as the wildcard character.

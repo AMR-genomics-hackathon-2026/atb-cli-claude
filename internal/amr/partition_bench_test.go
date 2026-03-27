@@ -95,7 +95,7 @@ func BenchmarkQuery_Monolithic_500K(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genus: "Escherichia"})
+		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -111,7 +111,7 @@ func BenchmarkQuery_Partitioned_500K(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genus: "Escherichia"})
+		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -128,7 +128,7 @@ func BenchmarkQuery_Monolithic_500K_Limit100(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genus: "Escherichia", Limit: 100})
+		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -144,7 +144,7 @@ func BenchmarkQuery_Partitioned_500K_Limit100(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genus: "Escherichia", Limit: 100})
+		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}, Limit: 100})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -161,7 +161,7 @@ func BenchmarkQuery_Monolithic_1M(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genus: "Escherichia"})
+		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -177,7 +177,7 @@ func BenchmarkQuery_Partitioned_1M(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		results, err := amr.Query(dir, amr.Filters{Genus: "Escherichia"})
+		results, err := amr.Query(dir, amr.Filters{Genera: []string{"Escherichia"}})
 		if err != nil {
 			b.Fatal(err)
 		}

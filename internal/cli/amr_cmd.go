@@ -31,8 +31,11 @@ func newAMRCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "amr",
-		Short: "Query AMR gene data for a species",
+		Short: "Query AMR gene data",
 		Long: `Query AMRFinderPlus gene hits from the merged amrfinderplus.parquet file.
+
+Use --species to filter by one or more species (comma-separated).
+When --species is omitted, all genera are scanned (requires --gene or --class).
 
 Run 'atb fetch' to download the data before querying.`,
 		Example: `  # Get AMR gene hits for E. coli (HQ only)
@@ -41,8 +44,14 @@ Run 'atb fetch' to download the data before querying.`,
   # Filter by drug class
   atb amr --species "Escherichia coli" --class "BETA-LACTAM"
 
-  # Search for beta-lactamase genes
+  # Search for beta-lactamase genes in E. coli
   atb amr --species "Escherichia coli" --gene "bla%"
+
+  # Compare beta-lactam resistance across species
+  atb amr --species "Escherichia coli,Klebsiella pneumoniae" --class "BETA-LACTAM"
+
+  # Find a gene across ALL genera (no species filter)
+  atb amr --gene "blaCTX-M-15" --limit 100
 
   # Query stress response genes
   atb amr --species "Escherichia coli" --type stress
@@ -60,13 +69,25 @@ Run 'atb fetch' to download the data before querying.`,
 				dir = cfg.General.DataDir
 			}
 
-			if species == "" {
-				return fmt.Errorf("--species is required")
+			// Parse species into genera (supports comma-separated)
+			var genera []string
+			if species != "" {
+				for _, sp := range strings.Split(species, ",") {
+					sp = strings.TrimSpace(sp)
+					if sp == "" {
+						continue
+					}
+					g := pq.GenusFromSpecies(sp)
+					if g == "" {
+						return fmt.Errorf("could not derive genus from species %q", sp)
+					}
+					genera = append(genera, g)
+				}
 			}
 
-			genus := pq.GenusFromSpecies(species)
-			if genus == "" {
-				return fmt.Errorf("could not derive genus from species %q", species)
+			// Require either --species or --gene/--class to avoid accidental full scans
+			if len(genera) == 0 && gene == "" && class == "" {
+				return fmt.Errorf("--species is required (or use --gene/--class to search across all genera)")
 			}
 
 			// Check if amrfinderplus.parquet exists
@@ -79,11 +100,18 @@ Run 'atb fetch' to download the data before querying.`,
 			var sampleSet map[string]struct{}
 			if hqOnly {
 				assemblyPath := filepath.Join(dir, "assembly.parquet")
+				generaSet := make(map[string]bool, len(genera))
+				for _, g := range genera {
+					generaSet[strings.ToLower(g)] = true
+				}
 				hqRows, hqErr := pq.ReadStreamFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
 					if r.HQFilter != "PASS" {
 						return false
 					}
-					return strings.EqualFold(pq.GenusFromSpecies(r.SylphSpecies), genus)
+					if len(generaSet) > 0 {
+						return generaSet[strings.ToLower(pq.GenusFromSpecies(r.SylphSpecies))]
+					}
+					return true
 				}, 0)
 				if hqErr != nil {
 					return fmt.Errorf("loading HQ samples: %w", hqErr)
@@ -101,7 +129,7 @@ Run 'atb fetch' to download the data before querying.`,
 				MinCoverage: minCoverage,
 				MinIdentity: minIdentity,
 				ElementType: elementType,
-				Genus:       genus,
+				Genera:      genera,
 				Limit:       limit,
 			}
 
@@ -134,7 +162,7 @@ Run 'atb fetch' to download the data before querying.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&species, "species", "", "species to query AMR data for (required)")
+	cmd.Flags().StringVar(&species, "species", "", "species to query (comma-separated for multiple)")
 	cmd.Flags().StringVar(&elementType, "type", "", "element type: amr (default), stress, virulence, all")
 	cmd.Flags().StringVar(&class, "class", "", "filter by drug class (case-insensitive, substring match)")
 	cmd.Flags().StringVar(&gene, "gene", "", "filter by gene symbol (supports % wildcards)")
@@ -144,8 +172,6 @@ Run 'atb fetch' to download the data before querying.`,
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of results")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table, auto")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "write output to file instead of stdout")
-
-	_ = cmd.MarkFlagRequired("species")
 
 	return cmd
 }

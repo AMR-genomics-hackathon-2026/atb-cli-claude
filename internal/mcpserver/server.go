@@ -168,7 +168,7 @@ func makeQueryHandler(dataDir string) mcp.ToolHandlerFor[queryInput, any] {
 // --- atb_amr ---
 
 type amrInput struct {
-	Species     string `json:"species"                  jsonschema:"Species name (required)"`
+	Species     string `json:"species,omitempty"        jsonschema:"Species name(s), comma-separated. Optional when gene or drug_class is given."`
 	DrugClass   string `json:"drug_class,omitempty"     jsonschema:"Filter by drug class (case-insensitive substring)"`
 	Gene        string `json:"gene,omitempty"           jsonschema:"Filter by gene symbol (supports % wildcards)"`
 	ElementType string `json:"element_type,omitempty"   jsonschema:"Type: amr, stress, virulence, or all (default: amr)"`
@@ -178,15 +178,25 @@ type amrInput struct {
 
 func makeAMRHandler(dataDir string) mcp.ToolHandlerFor[amrInput, any] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in amrInput) (*mcp.CallToolResult, any, error) {
-		if in.Species == "" {
-			return errorResult("species is required for atb_amr")
+		// Parse species into genera (supports comma-separated)
+		var genera []string
+		if in.Species != "" {
+			for _, sp := range strings.Split(in.Species, ",") {
+				sp = strings.TrimSpace(sp)
+				if sp == "" {
+					continue
+				}
+				parts := strings.Fields(sp)
+				if len(parts) == 0 {
+					continue
+				}
+				genera = append(genera, parts[0])
+			}
 		}
 
-		parts := strings.Fields(in.Species)
-		if len(parts) == 0 {
-			return errorResult("invalid species name")
+		if len(genera) == 0 && in.Gene == "" && in.DrugClass == "" {
+			return errorResult("species is required (or provide gene/drug_class to search across all genera)")
 		}
-		genus := parts[0]
 
 		elementType := in.ElementType
 		if elementType == "" {
@@ -199,11 +209,17 @@ func makeAMRHandler(dataDir string) mcp.ToolHandlerFor[amrInput, any] {
 			return errorResult(fmt.Sprintf("AMR data not found. Run: atb fetch to download %s", amr.AMRFileName))
 		}
 
+		limit := in.Limit
+		if limit <= 0 {
+			limit = 50
+		}
+
 		filters := amr.Filters{
 			Class:       in.DrugClass,
 			GenePattern: in.Gene,
 			ElementType: elementType,
-			Genus:       genus,
+			Genera:      genera,
+			Limit:       limit,
 		}
 
 		// If hq_only, get the HQ sample set from the index.
@@ -233,14 +249,6 @@ func makeAMRHandler(dataDir string) mcp.ToolHandlerFor[amrInput, any] {
 		results, err := amr.Query(dataDir, filters)
 		if err != nil {
 			return errorResult(fmt.Sprintf("AMR query failed: %v", err))
-		}
-
-		limit := in.Limit
-		if limit <= 0 {
-			limit = 50
-		}
-		if limit < len(results) {
-			results = results[:limit]
 		}
 
 		if results == nil {
