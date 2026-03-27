@@ -1,0 +1,245 @@
+package amr
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+	"unicode"
+
+	parquetgo "github.com/parquet-go/parquet-go"
+
+	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+)
+
+// PartitionDir is the subdirectory under the data dir where genus partitions live.
+const PartitionDir = "amr"
+
+// PartitionThreshold is the minimum number of rows a genus must have to get its
+// own partition file. Genera below this threshold are grouped into _other.parquet.
+const PartitionThreshold = 10_000
+
+const otherPartition = "_other"
+
+// BuildPartitions reads the monolithic amrfinderplus.parquet and writes per-genus
+// partition files into <dataDir>/amr/. Uses a streaming two-pass approach:
+//
+//  1. First pass: count rows per genus (reads only Genus column equivalent).
+//  2. Second pass: stream rows into per-genus writers, routing small genera to _other.
+//
+// logFn is called with progress messages (pass nil to suppress output).
+func BuildPartitions(dataDir string, logFn func(string, ...any)) error {
+	if logFn == nil {
+		logFn = func(string, ...any) {}
+	}
+
+	srcPath := filepath.Join(dataDir, AMRFileName)
+	outDir := filepath.Join(dataDir, PartitionDir)
+
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return fmt.Errorf("creating partition dir: %w", err)
+	}
+
+	logFn("Building AMR genus partitions...")
+	start := time.Now()
+
+	// Pass 1: count rows per genus
+	genusCounts, _, err := countByGenus(srcPath)
+	if err != nil {
+		return fmt.Errorf("counting genera: %w", err)
+	}
+
+	// Determine which genera get their own file
+	promoted := make(map[string]bool, len(genusCounts))
+	for genus, count := range genusCounts {
+		if count >= PartitionThreshold {
+			promoted[genus] = true
+		}
+	}
+
+	// Pass 2: stream rows into partition writers
+	writers := make(map[string]*genusWriter)
+	defer func() {
+		for _, gw := range writers {
+			gw.close()
+		}
+	}()
+
+	f, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("opening %s: %w", AMRFileName, err)
+	}
+	defer f.Close()
+
+	r := parquetgo.NewGenericReader[pq.AMRRow](f)
+	defer r.Close()
+
+	buf := make([]pq.AMRRow, 512)
+	var written int64
+	for {
+		n, readErr := r.Read(buf)
+		for i := 0; i < n; i++ {
+			row := buf[i]
+			key := row.Genus
+			if !promoted[key] {
+				key = otherPartition
+			}
+
+			gw, ok := writers[key]
+			if !ok {
+				gw, err = newGenusWriter(outDir, key)
+				if err != nil {
+					return fmt.Errorf("creating writer for %s: %w", key, err)
+				}
+				writers[key] = gw
+			}
+			if err := gw.write(row); err != nil {
+				return fmt.Errorf("writing row to %s: %w", key, err)
+			}
+		}
+		written += int64(n)
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return fmt.Errorf("reading %s: %w", AMRFileName, readErr)
+		}
+	}
+
+	// Close all writers and report
+	var otherGenera int
+	for key, gw := range writers {
+		if err := gw.close(); err != nil {
+			return fmt.Errorf("closing writer for %s: %w", key, err)
+		}
+		if key == otherPartition {
+			otherGenera = len(genusCounts) - len(promoted)
+			logFn("  %s.parquet (%s rows, %d genera)", key, formatCount(gw.count), otherGenera)
+		} else {
+			logFn("  %s.parquet (%s rows)", key, formatCount(gw.count))
+		}
+	}
+
+	elapsed := time.Since(start).Truncate(time.Millisecond)
+	logFn("Partitioned %s rows into %d files (%s)", formatCount(written), len(writers), elapsed)
+
+	return nil
+}
+
+// PartitionPath returns the path to a genus partition file if it exists.
+// Returns empty string if the partition doesn't exist.
+func PartitionPath(dataDir, genus string) string {
+	normalized := normalizeGenus(genus)
+	path := filepath.Join(dataDir, PartitionDir, normalized+".parquet")
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	return ""
+}
+
+func countByGenus(path string) (map[string]int64, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer f.Close()
+
+	r := parquetgo.NewGenericReader[pq.AMRRow](f)
+	defer r.Close()
+
+	counts := make(map[string]int64)
+	buf := make([]pq.AMRRow, 512)
+	var total int64
+
+	for {
+		n, readErr := r.Read(buf)
+		for i := 0; i < n; i++ {
+			counts[buf[i].Genus]++
+			total++
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return nil, 0, readErr
+		}
+	}
+
+	return counts, total, nil
+}
+
+// normalizeGenus converts a genus string to title case for partition filename matching.
+func normalizeGenus(genus string) string {
+	if genus == "" {
+		return ""
+	}
+	runes := []rune(strings.ToLower(genus))
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
+
+type genusWriter struct {
+	file   *os.File
+	writer *parquetgo.GenericWriter[pq.AMRRow]
+	count  int64
+	buf    []pq.AMRRow
+}
+
+func newGenusWriter(dir, name string) (*genusWriter, error) {
+	path := filepath.Join(dir, name+".parquet")
+	f, err := os.Create(path)
+	if err != nil {
+		return nil, err
+	}
+	return &genusWriter{
+		file:   f,
+		writer: parquetgo.NewGenericWriter[pq.AMRRow](f),
+		buf:    make([]pq.AMRRow, 0, 512),
+	}, nil
+}
+
+func (gw *genusWriter) write(row pq.AMRRow) error {
+	gw.buf = append(gw.buf, row)
+	gw.count++
+	if len(gw.buf) >= 512 {
+		return gw.flush()
+	}
+	return nil
+}
+
+func (gw *genusWriter) flush() error {
+	if len(gw.buf) == 0 {
+		return nil
+	}
+	if _, err := gw.writer.Write(gw.buf); err != nil {
+		return err
+	}
+	gw.buf = gw.buf[:0]
+	return nil
+}
+
+func (gw *genusWriter) close() error {
+	if gw.writer == nil {
+		return nil
+	}
+	if err := gw.flush(); err != nil {
+		return err
+	}
+	if err := gw.writer.Close(); err != nil {
+		return err
+	}
+	gw.writer = nil
+	return gw.file.Close()
+}
+
+func formatCount(n int64) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%d,%03d,%03d", n/1_000_000, (n/1_000)%1_000, n%1_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%d,%03d", n/1_000, n%1_000)
+	}
+	return fmt.Sprintf("%d", n)
+}

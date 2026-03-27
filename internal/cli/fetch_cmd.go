@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/fetch"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 )
@@ -116,11 +117,17 @@ Use --tables to specify exact tables by name.`,
 
 			fmt.Fprintf(os.Stderr, "All tables downloaded successfully.\n")
 
-			// Auto-build the SQLite index after a successful fetch.
-			fmt.Fprintf(os.Stderr, "Building query index...\n")
 			stderrLog := func(format string, args ...any) {
 				fmt.Fprintf(os.Stderr, format+"\n", args...)
 			}
+
+			// Build genus partitions for faster AMR queries.
+			if err := amr.BuildPartitions(dir, stderrLog); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: AMR partition build failed: %v\n", err)
+			}
+
+			// Auto-build the SQLite index after a successful fetch.
+			fmt.Fprintf(os.Stderr, "Building query index...\n")
 			if err := index.Build(dir, stderrLog); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: index build failed: %v\n", err)
 			}

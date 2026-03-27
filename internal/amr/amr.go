@@ -47,15 +47,24 @@ type Result struct {
 	Genus           string
 }
 
-// Query reads amrfinderplus.parquet from dataDir, applies filters, and returns matching results.
+// Query reads AMR data from dataDir, applies filters, and returns matching results.
+// If a genus partition file exists for the requested genus, it reads only that file.
+// Otherwise it falls back to the monolithic amrfinderplus.parquet.
 func Query(dataDir string, filters Filters) ([]Result, error) {
 	amrPath := filepath.Join(dataDir, AMRFileName)
+
+	// Try genus partition first (much smaller file)
+	if filters.Genus != "" {
+		if partPath := PartitionPath(dataDir, filters.Genus); partPath != "" {
+			amrPath = partPath
+		}
+	}
 
 	rows, err := pq.ReadStreamFiltered[pq.AMRRow](amrPath, func(row pq.AMRRow) bool {
 		return matchesFilters(row, filters)
 	}, filters.Limit)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", AMRFileName, err)
+		return nil, fmt.Errorf("reading %s: %w", filepath.Base(amrPath), err)
 	}
 
 	results := make([]Result, 0, len(rows))
