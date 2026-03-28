@@ -1,0 +1,188 @@
+# Changelog
+
+All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
+
+## [v0.9.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.9.0) - 2026-03-28
+
+### Added
+- `atb sketch query` -- find closest ATB genomes via MinHash sketch distances (ANI)
+- `atb sketch install` -- auto-download sketchlib binary from GitHub releases (Linux/macOS)
+- `atb sketch fetch` -- download ATB sketch database from OSF (~4.2 GB, ~3.2M genomes)
+- `atb sketch query --download` -- fetch matched genome assemblies alongside results
+- `atb sketch info` -- show sketch database stats (sample count, k-mer sizes, size)
+- `--dry-run` flag on sketch query download for previewing
+- `--knn` and `--threads` flags for controlling match count and parallelism
+
+### Changed
+- Consolidate all external URLs into `internal/sources/sources.go` (single source of truth)
+- Format large numbers with thousand separators across all commands (e.g. `1,868,526`)
+- Default sketch threads to NumCPU - 1 for faster queries
+
+## [v0.8.2](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.8.2) - 2026-03-28
+
+### Changed
+- `atb osf ls` defaults to table format in terminal, TSV when piped
+- Show human-readable sizes (KB/MB/GB) instead of raw MB in OSF listings
+
+## [v0.8.1](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.8.1) - 2026-03-28
+
+### Fixed
+- Background update check now saves state before process exit (was racing against `main()`)
+- Update notice shows on every run when newer version exists (not just once per 24h)
+
+## [v0.8.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.8.0) - 2026-03-28
+
+### Added
+- `atb osf ls` -- browse ~3,000 ATB files across 75+ OSF project categories
+- `atb osf download` -- download files by regex pattern with MD5 verification
+- `--grep`, `--project`, `--sort`, `--refresh` flags for flexible file discovery
+- OSF file index cached locally with 7-day TTL
+
+### Changed
+- Download module: transport-level timeouts (no more killed large transfers)
+- `DownloadAllFiles()` accepts `FileTask` structs with filenames and MD5 checksums
+- Progress reporting via callback during downloads
+- Handle HTTP 416 by clearing stale `.part` files
+
+## [v0.7.3](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.7.3) - 2026-03-27
+
+### Added
+- Comprehensive benchmarks in `docs/BENCHMARKS.md` with 3-tier AMR query results
+
+### Fixed
+- SQL LIKE pattern escaping for underscores in gene names
+
+## [v0.7.2](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.7.2) - 2026-03-27
+
+### Changed
+- Default output format is now TSV (override with `--format table`)
+- Update check shows release notes and changelog
+
+## [v0.7.1](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.7.1) - 2026-03-27
+
+### Fixed
+- SQLite variable limit error when using `--hq-only` with AMR queries
+
+### Changed
+- Show help when subcommands are called without flags
+
+## [v0.7.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.7.0) - 2026-03-27
+
+### Added
+- Per-genus SQLite indexes for instant AMR queries (<10ms)
+- Interactive prompt before building indexes after fetch
+- `--yes`/`-y` flag for non-interactive index builds
+- Database summary with file sizes after fetch
+
+### Performance
+- Index build uses up to 8 workers concurrently
+
+## [v0.6.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.6.0) - 2026-03-27
+
+### Added
+- Comma-separated species in `--species` flag for multi-species queries
+- `--gene`/`--class` queries across all genera without `--species`
+
+### Performance
+- Stream-filter parquet rows during deserialization (276-556x faster with `--limit`)
+- Genus-partitioned parquet files eliminate 65-96% of I/O per query
+
+## [v0.5.2](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.5.2) - 2026-03-27
+
+### Fixed
+- Auto-detect CSV/TSV delimiter from file content instead of file extension
+
+## [v0.5.1](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.5.1) - 2026-03-27
+
+### Performance
+- Parallelize parquet reads during index build
+
+### Fixed
+- AMR test fixtures missing from repo
+- Self-update "text file busy" on running binary
+
+## [v0.5.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.5.0) - 2026-03-27
+
+### Added
+- `atb mlst` -- query MLST data with scheme/ST/status filters (2.44M records, 156 schemes)
+- MLST section in `atb info` output
+- `atb_mlst` MCP tool for LLM integration
+
+### Changed
+- AMR data unified into single `amrfinderplus.parquet` (81 MB, 25.6M rows)
+- `atb fetch` now downloads 7 core tables including AMR and MLST
+- All data sourced from OSF
+
+## [v0.4.1](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.4.1) - 2026-03-27
+
+### Fixed
+- Self-update: `rm` before `cp` to avoid "Text file busy" error in `/usr/local/bin`
+
+## [v0.4.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.4.0) - 2026-03-27
+
+### Added
+- `atb mlst` -- query Multi-Locus Sequence Typing data
+- Filter by species, sequence type (`--st`), scheme, status
+- MLST data in sample info (`atb info`)
+- `atb_mlst` MCP tool
+- `mlst.parquet` added to core fetch tables
+
+## [v0.3.1](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.3.1) - 2026-03-26
+
+### Added
+- HTTP/SSE transport for MCP server (`atb mcp --http :8080`)
+- CORS middleware for cross-origin access
+- Codex CLI setup instructions
+- MIT license
+
+## [v0.3.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.3.0) - 2026-03-26
+
+### Added
+- SQLite query index (700-4000x faster queries, <10ms vs 7-40s)
+- `atb mcp` -- Model Context Protocol server for LLM integration
+- 5 MCP tools: `atb_query`, `atb_amr`, `atb_info`, `atb_stats`, `atb_species_list`
+- `atb index` command to manually rebuild index
+- Transparent fallback to parquet scan when index is absent
+
+### Performance
+- Single sample info: <10ms, 14 MB RAM (was 39.5s, 2.2 GB)
+- Species query: <10ms, 15 MB RAM (was 7.3s, 2.1 GB)
+
+## [v0.2.2](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.2.2) - 2026-03-26
+
+### Changed
+- Practical examples in every command's `--help` output
+
+## [v0.2.1](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.2.1) - 2026-03-26
+
+### Fixed
+- Self-update uses sudo when binary is in a privileged directory
+
+## [v0.2.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.2.0) - 2026-03-26
+
+### Added
+- `atb amr` -- query AMRFinderPlus gene hits by species, drug class, gene symbol
+- AMR data fetch from GitHub by genus (hive-partitioned parquet)
+- Support for AMR, stress, and virulence element types
+- Filters: `--class`, `--gene` (wildcards), `--min-coverage`, `--min-identity`
+
+### Fixed
+- Install script: version parsing on macOS/BSD
+- Install script: unbound variable in cleanup trap
+
+## [v0.1.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.1.0) - 2026-03-26
+
+### Added
+- Query 3.2M bacterial genomes by species, genus, quality, N50, country, platform
+- Filter via CLI flags or reproducible TOML filter files
+- Multi-table joins: assembly + checkm2 + assembly_stats + ENA metadata
+- Fuzzy species name suggestion (Levenshtein distance)
+- Parallel HTTP download with resume and retry
+- Disk space checking before downloads
+- Summary statistics with group-by dimensions
+- Detailed sample info across all tables
+- Auto-detect output format (table for terminal, TSV for pipes)
+- TSV, CSV, JSON, and table output formats
+- TOML configuration with OS-standard paths
+- Self-update from GitHub releases with background version check
+- One-line install script (`curl | bash`)
