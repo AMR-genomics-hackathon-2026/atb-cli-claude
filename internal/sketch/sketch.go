@@ -23,7 +23,16 @@ type DatabaseInfo struct {
 func FindBinary() (string, error) {
 	path, err := exec.LookPath(BinaryName)
 	if err != nil {
-		return "", fmt.Errorf("sketchlib not found in PATH.\nInstall with: cargo install sketchlib\n         or: conda install -c bioconda sketchlib")
+		return "", fmt.Errorf(`sketchlib not found in PATH.
+
+Install from pre-built binary (Linux/macOS):
+  https://github.com/bacpop/sketchlib.rust/releases/latest
+
+Or via package managers:
+  cargo install sketchlib
+  conda install -c bioconda sketchlib
+
+Note: sketch features are not available on Windows.`)
 	}
 	return path, nil
 }

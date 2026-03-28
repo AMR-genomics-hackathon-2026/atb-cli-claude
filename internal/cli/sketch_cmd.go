@@ -51,9 +51,10 @@ func newSketchCmd() *cobra.Command {
 		Long: `Find the closest genomes in the AllTheBacteria database to your input
 sequences using MinHash sketch distances (via sketchlib).
 
-Requires the sketchlib binary in PATH:
-  cargo install sketchlib
-  conda install -c bioconda sketchlib`,
+Requires the sketchlib binary (Linux/macOS only, not available on Windows):
+  Pre-built: https://github.com/bacpop/sketchlib.rust/releases/latest
+  Cargo:     cargo install sketchlib
+  Conda:     conda install -c bioconda sketchlib`,
 	}
 
 	cmd.AddCommand(newSketchFetchCmd())
