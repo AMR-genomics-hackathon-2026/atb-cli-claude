@@ -40,6 +40,7 @@ func init() {
 	RootCmd.AddCommand(newMCPCmd())
 	RootCmd.AddCommand(newMLSTCmd())
 	RootCmd.AddCommand(newOSFCmd())
+	RootCmd.AddCommand(newSketchCmd())
 
 	// Background update check (non-blocking, once every 24h)
 	originalPreRun := RootCmd.PersistentPreRun
@@ -87,6 +88,7 @@ func NewRootCmd(version string) *cobra.Command {
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newMLSTCmd())
 	root.AddCommand(newOSFCmd())
+	root.AddCommand(newSketchCmd())
 
 	return root
 }
