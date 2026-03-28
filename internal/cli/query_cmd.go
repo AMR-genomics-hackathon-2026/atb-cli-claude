@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
@@ -220,10 +221,12 @@ func newQueryCmd() *cobra.Command {
 				}
 			}
 
+			fmt.Fprintf(os.Stderr, "Querying parquet files (this may take a moment)...\n")
 			results, queryErr = query.Execute(dir, filters, outCfg.Columns)
 			if queryErr != nil {
 				return fmt.Errorf("query failed: %w", queryErr)
 			}
+			fmt.Fprintf(os.Stderr, "\r\033[K")
 
 			// Suggest species if no results and a species filter was set
 			if len(results) == 0 && filters.Species != "" {
@@ -267,6 +270,8 @@ func newQueryCmd() *cobra.Command {
 			}
 
 		renderOutput:
+			fmt.Fprintf(os.Stderr, "%s result(s)\n", humanize.Comma(int64(len(results))))
+
 			// Determine columns
 			cols := outCfg.Columns
 			if len(cols) == 0 {
