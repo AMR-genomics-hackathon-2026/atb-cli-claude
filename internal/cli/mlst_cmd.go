@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
@@ -76,6 +77,7 @@ func newMLSTCmd() *cobra.Command {
 				"mlst_alleles",
 			}
 
+			fmt.Fprintf(os.Stderr, "Querying MLST data...\n")
 			rows, err := db.Query(idx.QueryParams{
 				Species:      species,
 				HQOnly:       hqOnly,
@@ -89,8 +91,9 @@ func newMLSTCmd() *cobra.Command {
 				return fmt.Errorf("query failed: %w", err)
 			}
 
+			fmt.Fprintf(os.Stderr, "%s result(s)\n", humanize.Comma(int64(len(rows))))
+
 			if len(rows) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No results found.")
 				return nil
 			}
 

@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dustin/go-humanize"
+
 	"github.com/spf13/cobra"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
@@ -100,9 +102,9 @@ Run 'atb fetch' to download the data before querying.`,
 				return fmt.Errorf("AMR data not found — run 'atb fetch' to download %s", amr.AMRFileName)
 			}
 
-			// Optionally build HQ sample set from assembly.parquet
 			var sampleSet map[string]struct{}
 			if hqOnly {
+				fmt.Fprintf(os.Stderr, "Loading HQ sample set...\n")
 				assemblyPath := filepath.Join(dir, "assembly.parquet")
 				generaSet := make(map[string]bool, len(genera))
 				for _, g := range genera {
@@ -137,10 +139,12 @@ Run 'atb fetch' to download the data before querying.`,
 				Limit:       limit,
 			}
 
+			fmt.Fprintf(os.Stderr, "Querying AMR data...\n")
 			results, err := amr.Query(dir, filters)
 			if err != nil {
 				return fmt.Errorf("AMR query failed: %w", err)
 			}
+			fmt.Fprintf(os.Stderr, "%s result(s)\n", humanize.Comma(int64(len(results))))
 
 			rows := amrResultsToOutputRows(results)
 			cols := amrColumns()
