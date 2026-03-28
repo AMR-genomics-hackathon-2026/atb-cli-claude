@@ -169,11 +169,13 @@ This is required before running 'atb sketch query'.`,
 
 func newSketchQueryCmd() *cobra.Command {
 	var (
-		fileList string
-		knn      int
-		threads  int
-		format   string
-		raw      bool
+		fileList    string
+		knn         int
+		threads     int
+		format      string
+		raw         bool
+		downloadDir string
+		dryRun      bool
 	)
 
 	cmd := &cobra.Command{
@@ -195,7 +197,13 @@ Identity) and metadata from the local ATB index.`,
   atb sketch query -f input_list.txt
 
   # Raw sketchlib distances without metadata enrichment
-  atb sketch query my_genome.fasta --raw`,
+  atb sketch query my_genome.fasta --raw
+
+  # Find closest and download their assemblies
+  atb sketch query my_genome.fasta --download ./closest_genomes
+
+  # Preview downloads without actually downloading
+  atb sketch query my_genome.fasta --download ./closest_genomes --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 && fileList == "" {
 				return cmd.Help()
@@ -274,10 +282,20 @@ Identity) and metadata from the local ATB index.`,
 			fmt.Fprintf(os.Stderr, "%d match(es) found.\n\n", len(matches))
 
 			if raw {
-				return printRawMatches(cmd, matches, format)
+				if err := printRawMatches(cmd, matches, format); err != nil {
+					return err
+				}
+			} else {
+				if err := printEnrichedMatches(cmd, matches, dir, format); err != nil {
+					return err
+				}
 			}
 
-			return printEnrichedMatches(cmd, matches, dir, format)
+			if downloadDir != "" {
+				return downloadMatchedGenomes(matches, dir, downloadDir, dryRun)
+			}
+
+			return nil
 		},
 	}
 
@@ -286,6 +304,8 @@ Identity) and metadata from the local ATB index.`,
 	cmd.Flags().IntVar(&threads, "threads", 0, "CPU threads (default: all available)")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table (default: auto)")
 	cmd.Flags().BoolVar(&raw, "raw", false, "output raw distances without metadata enrichment")
+	cmd.Flags().StringVar(&downloadDir, "download", "", "download matched genomes to this directory")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would be downloaded without downloading")
 
 	return cmd
 }
@@ -395,4 +415,81 @@ func printEnrichedMatches(cmd *cobra.Command, matches []sketch.Match, dir, forma
 	}
 
 	return output.Format(cmd.OutOrStdout(), rows, columns, resolved)
+}
+
+func downloadMatchedGenomes(matches []sketch.Match, dataDir, outputDir string, dryRun bool) error {
+	var db *idx.DB
+	if idx.Exists(dataDir) {
+		var err error
+		db, err = idx.Open(dataDir)
+		if err == nil {
+			defer db.Close()
+		}
+	}
+	if db == nil {
+		return fmt.Errorf("ATB index not found; run 'atb fetch' first to enable genome downloads")
+	}
+
+	var tasks []download.FileTask
+	for _, m := range matches {
+		info, err := db.InfoRow(m.RefName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  skip %s: not found in index\n", m.RefName)
+			continue
+		}
+		url := info["aws_url"]
+		if url == "" {
+			fmt.Fprintf(os.Stderr, "  skip %s: no download URL\n", m.RefName)
+			continue
+		}
+		tasks = append(tasks, download.FileTask{
+			URL:      url,
+			Filename: filepath.Base(url),
+		})
+	}
+
+	if len(tasks) == 0 {
+		fmt.Fprintln(os.Stderr, "No downloadable genomes found for matched samples.")
+		return nil
+	}
+
+	if dryRun {
+		fmt.Fprintf(os.Stderr, "\nWould download %d genome(s) to %s:\n", len(tasks), outputDir)
+		for _, t := range tasks {
+			fmt.Fprintf(os.Stderr, "  %s\n", t.URL)
+		}
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "\nDownloading %d genome(s) to %s...\n", len(tasks), outputDir)
+
+	dl := download.New(download.Config{
+		OutputDir:  outputDir,
+		Parallel:   4,
+		MaxRetries: 3,
+	})
+
+	dl.OnProgress = func(filename string, written, total int64) {
+		if total > 0 {
+			pct := float64(written) / float64(total) * 100
+			fmt.Fprintf(os.Stderr, "\r  %s: %.1f%%", filename, pct)
+		} else {
+			fmt.Fprintf(os.Stderr, "\r  %s: %s", filename, formatSize(written))
+		}
+	}
+
+	result := dl.DownloadAllFiles(tasks)
+
+	fmt.Fprintf(os.Stderr, "\r\033[KDownloaded: %d/%d  Bytes: %s\n",
+		result.Completed, result.Total, formatSize(result.Bytes))
+
+	for _, e := range result.Errors {
+		fmt.Fprintf(os.Stderr, "  error: %s: %s\n", e.URL, e.Error)
+	}
+
+	if result.Failed > 0 {
+		return fmt.Errorf("%d download(s) failed", result.Failed)
+	}
+
+	return nil
 }
