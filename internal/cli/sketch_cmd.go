@@ -283,7 +283,7 @@ Identity) and metadata from the local ATB index.`,
 
 	cmd.Flags().StringVarP(&fileList, "file-list", "f", "", "file with one FASTA path per line")
 	cmd.Flags().IntVar(&knn, "knn", 10, "number of closest matches to return")
-	cmd.Flags().IntVar(&threads, "threads", 1, "CPU threads for sketching and distance calculation")
+	cmd.Flags().IntVar(&threads, "threads", 0, "CPU threads (default: all available)")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table (default: auto)")
 	cmd.Flags().BoolVar(&raw, "raw", false, "output raw distances without metadata enrichment")
 

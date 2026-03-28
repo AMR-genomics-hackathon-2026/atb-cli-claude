@@ -263,6 +263,19 @@ func ParseDistOutput(r io.Reader) ([]Match, error) {
 	return matches, scanner.Err()
 }
 
+// resolveThreads returns the thread count to use: if n <= 0, uses NumCPU - 1
+// to leave one core free for the system.
+func resolveThreads(n int) int {
+	if n <= 0 {
+		cpus := runtime.NumCPU() - 1
+		if cpus < 1 {
+			cpus = 1
+		}
+		return cpus
+	}
+	return n
+}
+
 func SketchQuery(inputs []string, kmerSizes []int, threads int) (tmpDir, prefix string, err error) {
 	bin, err := FindBinary()
 	if err != nil {
@@ -277,10 +290,8 @@ func SketchQuery(inputs []string, kmerSizes []int, threads int) (tmpDir, prefix 
 	for i, k := range kmerSizes {
 		kStrs[i] = strconv.Itoa(k)
 	}
-	args := []string{"sketch", "-o", prefix, "--k-vals", strings.Join(kStrs, ",")}
-	if threads > 0 {
-		args = append(args, "--threads", strconv.Itoa(threads))
-	}
+	t := resolveThreads(threads)
+	args := []string{"sketch", "-o", prefix, "--k-vals", strings.Join(kStrs, ","), "--threads", strconv.Itoa(t)}
 	args = append(args, inputs...)
 	cmd := exec.Command(bin, args...)
 	cmd.Stderr = os.Stderr
@@ -296,10 +307,8 @@ func QueryDist(refPrefix, queryPrefix string, kmer, threads, topN int) ([]Match,
 	if err != nil {
 		return nil, err
 	}
-	args := []string{"dist", refPrefix, queryPrefix, "-k", strconv.Itoa(kmer), "--ani"}
-	if threads > 0 {
-		args = append(args, "--threads", strconv.Itoa(threads))
-	}
+	t := resolveThreads(threads)
+	args := []string{"dist", refPrefix, queryPrefix, "-k", strconv.Itoa(kmer), "--ani", "--threads", strconv.Itoa(t)}
 	cmd := exec.Command(bin, args...)
 	out, err := cmd.Output()
 	if err != nil {
