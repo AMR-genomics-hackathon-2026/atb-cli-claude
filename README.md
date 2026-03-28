@@ -104,10 +104,17 @@ If you don't have the parquet files yet:
 
 ## Updating
 
-`atb` checks for new versions automatically in the background (once every 24 hours). If a newer release is found, you'll see a notice:
+`atb` checks for new versions in the background (once every 24 hours). If a newer release is found, you'll see a notice on every run until you upgrade:
 
 ```
-  A new version of atb is available: v0.2.0 (current: v0.1.0)
+  A new version of atb is available: v0.9.0 (current: v0.8.0)
+
+  What's new:
+    feat: find closest ATB genomes via sketch distances
+    ...
+
+  Release: https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.9.0
+
   Run 'atb update' to upgrade.
 ```
 
