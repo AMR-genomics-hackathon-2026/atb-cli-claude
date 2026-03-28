@@ -221,3 +221,74 @@ func TestMLSTInInfoRow(t *testing.T) {
 		t.Error("InfoRow: mlst_st is empty")
 	}
 }
+
+func TestSpeciesCountList(t *testing.T) {
+	db := buildTestIndex(t)
+
+	counts, err := db.SpeciesCountList(0, false)
+	if err != nil {
+		t.Fatalf("SpeciesCountList: %v", err)
+	}
+	if len(counts) == 0 {
+		t.Fatal("expected non-empty species counts")
+	}
+
+	// Results should be sorted descending by count.
+	for i := 1; i < len(counts); i++ {
+		if counts[i].Count > counts[i-1].Count {
+			t.Errorf("results not sorted descending: counts[%d]=%d > counts[%d]=%d",
+				i, counts[i].Count, i-1, counts[i-1].Count)
+		}
+	}
+
+	// Verify E. coli appears with count 5.
+	var ecoliCount int
+	for _, sc := range counts {
+		if sc.Species == "Escherichia coli" {
+			ecoliCount = sc.Count
+			break
+		}
+	}
+	if ecoliCount != 5 {
+		t.Errorf("expected 5 E. coli samples, got %d", ecoliCount)
+	}
+}
+
+func TestSpeciesCountListHQOnly(t *testing.T) {
+	db := buildTestIndex(t)
+
+	allCounts, err := db.SpeciesCountList(0, false)
+	if err != nil {
+		t.Fatalf("SpeciesCountList(all): %v", err)
+	}
+
+	hqCounts, err := db.SpeciesCountList(0, true)
+	if err != nil {
+		t.Fatalf("SpeciesCountList(hq): %v", err)
+	}
+
+	// HQ total should be <= total.
+	totalAll := 0
+	for _, sc := range allCounts {
+		totalAll += sc.Count
+	}
+	totalHQ := 0
+	for _, sc := range hqCounts {
+		totalHQ += sc.Count
+	}
+	if totalHQ > totalAll {
+		t.Errorf("HQ total %d > all total %d", totalHQ, totalAll)
+	}
+}
+
+func TestSpeciesCountListLimit(t *testing.T) {
+	db := buildTestIndex(t)
+
+	counts, err := db.SpeciesCountList(2, false)
+	if err != nil {
+		t.Fatalf("SpeciesCountList: %v", err)
+	}
+	if len(counts) > 2 {
+		t.Errorf("expected at most 2 results with limit=2, got %d", len(counts))
+	}
+}

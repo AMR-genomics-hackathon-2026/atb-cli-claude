@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -215,6 +216,23 @@ func SortResults(rows []ResultRow, sortBy string, desc bool) {
 			return a > b
 		}
 		return a < b
+	})
+}
+
+// ShuffleResults randomly shuffles rows in place using the given seed.
+// This enables reproducible random subsampling: shuffle first, then apply limit.
+// If seed is 0, the shuffle uses a non-deterministic source.
+func ShuffleResults(rows []ResultRow, seed int64) {
+	var r *rand.Rand
+	if seed != 0 {
+		//nolint:gosec // deterministic seeded RNG is intentional here
+		r = rand.New(rand.NewSource(seed))
+	} else {
+		//nolint:gosec // non-crypto random is fine for sampling
+		r = rand.New(rand.NewSource(rand.Int63()))
+	}
+	r.Shuffle(len(rows), func(i, j int) {
+		rows[i], rows[j] = rows[j], rows[i]
 	})
 }
 

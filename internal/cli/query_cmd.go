@@ -26,6 +26,7 @@ func newQueryCmd() *cobra.Command {
 		sortDesc   bool
 		limit      int
 		offset     int
+		seed       int
 		format     string
 		outputFile string
 
@@ -70,7 +71,10 @@ func newQueryCmd() *cobra.Command {
   atb query --filter my_query.toml
 
   # Output as CSV to a file
-  atb query --species "Escherichia coli" --hq-only --format csv -o results.csv`,
+  atb query --species "Escherichia coli" --hq-only --format csv -o results.csv
+
+  # Reproducible random subsample of 200 E. coli genomes
+  atb query --species "Escherichia coli" --hq-only --limit 200 --seed 42`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
 				return cmd.Help()
@@ -179,6 +183,9 @@ func newQueryCmd() *cobra.Command {
 			if cmd.Flags().Changed("output") {
 				outCfg.Output = outputFile
 			}
+			if cmd.Flags().Changed("seed") {
+				outCfg.Seed = seed
+			}
 
 			// Try SQLite index first (much faster).
 			var results []query.ResultRow
@@ -247,6 +254,15 @@ func newQueryCmd() *cobra.Command {
 						}
 					}
 				}
+			}
+
+			// If a limit is requested with no explicit sort, do a reproducible
+			// random subsample: first sort by stable key (sample_accession) so
+			// the input to the shuffle is deterministic regardless of map
+			// iteration order, then shuffle with the seed.
+			if outCfg.Limit > 0 && outCfg.SortBy == "" && outCfg.Seed != 0 {
+				query.SortResults(results, "sample_accession", false)
+				query.ShuffleResults(results, int64(outCfg.Seed))
 			}
 
 			// Sort if requested
@@ -324,6 +340,7 @@ func newQueryCmd() *cobra.Command {
 	cmd.Flags().IntVar(&offset, "offset", 0, "number of rows to skip")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table, auto")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "write output to file instead of stdout")
+	cmd.Flags().IntVar(&seed, "seed", 0, "random seed for reproducible subsampling when --limit is set (0 = non-deterministic)")
 
 	return cmd
 }

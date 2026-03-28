@@ -164,6 +164,74 @@ func TestConfigShow(t *testing.T) {
 	}
 }
 
+func TestIsGTDBPlaceholder(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"named species", "Escherichia coli", false},
+		{"named with GTDB suffix", "Enterobacter hormaechei_A", false},
+		{"placeholder 6 digits", "Escherichia sp001234567", true},
+		{"placeholder 9 digits", "Klebsiella sp000746275", true},
+		{"short sp not placeholder", "Bacillus sp123", false}, // only 3 digits
+		{"empty string", "", false},
+		{"just genus", "Salmonella", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isGTDBPlaceholder(tc.input)
+			if got != tc.expected {
+				t.Errorf("isGTDBPlaceholder(%q) = %v, want %v", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestSpeciesCountHelp(t *testing.T) {
+	stdout, _, err := runCmd("species-count", "--help")
+	if err != nil {
+		t.Fatalf("species-count --help failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "species") {
+		t.Errorf("expected 'species' in species-count --help output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "--top") {
+		t.Errorf("expected '--top' flag in species-count --help output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "--hq-only") {
+		t.Errorf("expected '--hq-only' flag in species-count --help output, got:\n%s", stdout)
+	}
+}
+
+func TestQuerySeedFlag(t *testing.T) {
+	// Verify that --seed is accepted and query succeeds.
+	stdout, _, err := runCmd("query", "--data-dir", fixtureDir, "--hq-only", "--limit", "3", "--seed", "42", "--format", "tsv")
+	if err != nil {
+		t.Fatalf("query --seed failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	// 1 header + up to 3 data rows.
+	if len(lines) < 2 || len(lines) > 4 {
+		t.Errorf("expected 2-4 lines (header + <=3 results), got %d:\n%s", len(lines), stdout)
+	}
+}
+
+func TestQuerySeedReproducible(t *testing.T) {
+	// Two runs with the same seed and limit should return the same rows.
+	stdout1, _, err1 := runCmd("query", "--data-dir", fixtureDir, "--hq-only", "--limit", "5", "--seed", "42", "--format", "tsv")
+	stdout2, _, err2 := runCmd("query", "--data-dir", fixtureDir, "--hq-only", "--limit", "5", "--seed", "42", "--format", "tsv")
+	if err1 != nil || err2 != nil {
+		t.Fatalf("query failed: %v / %v", err1, err2)
+	}
+	if stdout1 != stdout2 {
+		t.Errorf("same seed produced different output:\nrun1:\n%s\nrun2:\n%s", stdout1, stdout2)
+	}
+}
+
 func TestMLSTHelp(t *testing.T) {
 	stdout, _, err := runCmd("mlst", "--help")
 	if err != nil {
