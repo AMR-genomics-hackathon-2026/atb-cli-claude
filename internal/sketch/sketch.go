@@ -15,13 +15,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
 )
 
-const (
-	BinaryName       = "sketchlib"
-	sketchlibVersion = "v0.2.4"
-	sketchlibRepo    = "bacpop/sketchlib.rust"
-)
+const BinaryName = "sketchlib"
 
 type DatabaseInfo struct {
 	Samples    int
@@ -57,7 +55,7 @@ Or install manually:
   Cargo:     cargo install sketchlib
   Conda:     conda install -c bioconda sketchlib
 
-Note: sketch features are not available on Windows.`, sketchlibRepo)
+Note: sketch features are not available on Windows.`, sources.SketchlibRepo)
 }
 
 // InstallBinary downloads the sketchlib binary from GitHub releases and places
@@ -87,8 +85,8 @@ func InstallBinary(progress func(string)) error {
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
-	assetName := fmt.Sprintf("sketchlib-%s-%s-stable.tar.gz", sketchlibVersion, platform)
-	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", sketchlibRepo, sketchlibVersion, assetName)
+	assetName := fmt.Sprintf("sketchlib-%s-%s-stable.tar.gz", sources.SketchlibVersion, platform)
+	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", sources.SketchlibRepo, sources.SketchlibVersion, assetName)
 
 	if progress != nil {
 		progress(fmt.Sprintf("Downloading %s...", assetName))
@@ -127,7 +125,7 @@ func InstallBinary(progress func(string)) error {
 	}
 
 	if progress != nil {
-		progress(fmt.Sprintf("Installed sketchlib %s to %s", sketchlibVersion, destPath))
+		progress(fmt.Sprintf("Installed sketchlib %s to %s", sources.SketchlibVersion, destPath))
 	}
 
 	return nil

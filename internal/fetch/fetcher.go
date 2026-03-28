@@ -7,48 +7,21 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
 )
-
-// tableURLs maps parquet table filenames to their OSF download URLs.
-// Source: https://osf.io/h7wzy/files/osfstorage
-// Path: Aggregated/Latest_2025-05/atb.metadata.202505.parquet/
-var tableURLs = map[string]string{
-	"assembly.parquet":         "https://osf.io/download/4ku2n/",
-	"assembly_stats.parquet":   "https://osf.io/download/69c51e86801fecc5d6146396/",
-	"checkm2.parquet":          "https://osf.io/download/69c51e93cba7111bb21d27f2/",
-	"sylph.parquet":            "https://osf.io/download/69c51f90cba7111bb21d2905/",
-	"run.parquet":              "https://osf.io/download/69c51f68376eb79a651d2d85/",
-	"ena_20250506.parquet":     "https://osf.io/download/69c51f3ab4f99c692d54cf73/",
-	"ena_20240801.parquet":     "https://osf.io/download/69c51f002e72f67915145d0e/",
-	"ena_20240625.parquet":     "https://osf.io/download/69c51ec99ce80b96ac54cd08/",
-	"ena_202505_used.parquet":  "https://osf.io/download/69c51f475eedad376954ce7b/",
-	"ena_661k.parquet":         "https://osf.io/download/69c51f57376eb79a651d2d83/",
-	"mlst.parquet":             "https://osf.io/download/69c66d33fa3d973d94254f46/",
-	"amrfinderplus.parquet":    "https://osf.io/download/69c69298f4dc657ae4253e8b/",
-}
-
-// coreTables lists the essential tables for basic ATB operations.
-var coreTables = []string{
-	"assembly.parquet",
-	"assembly_stats.parquet",
-	"checkm2.parquet",
-	"sylph.parquet",
-	"run.parquet",
-	"mlst.parquet",
-	"amrfinderplus.parquet",
-}
 
 // CoreTables returns the names of the core parquet tables.
 func CoreTables() []string {
-	out := make([]string, len(coreTables))
-	copy(out, coreTables)
+	out := make([]string, len(sources.CoreTables))
+	copy(out, sources.CoreTables)
 	return out
 }
 
 // AllTables returns the names of all available parquet tables.
 func AllTables() []string {
-	out := make([]string, 0, len(tableURLs))
-	for name := range tableURLs {
+	out := make([]string, 0, len(sources.TableURLs))
+	for name := range sources.TableURLs {
 		out = append(out, name)
 	}
 	return out
@@ -56,7 +29,7 @@ func AllTables() []string {
 
 // URLForTable returns the download URL for a named table, and whether it exists.
 func URLForTable(name string) (string, bool) {
-	u, ok := tableURLs[name]
+	u, ok := sources.TableURLs[name]
 	return u, ok
 }
 
@@ -82,7 +55,7 @@ func New(cfg Config) *Fetcher {
 }
 
 // FetchTable downloads a single parquet table by name, using an atomic
-// rename (.tmp → final) to avoid partial writes. If force is false and
+// rename (.tmp -> final) to avoid partial writes. If force is false and
 // the final file already exists, it is skipped.
 func (f *Fetcher) FetchTable(name, url string, force bool) error {
 	if err := os.MkdirAll(f.cfg.DataDir, 0755); err != nil {

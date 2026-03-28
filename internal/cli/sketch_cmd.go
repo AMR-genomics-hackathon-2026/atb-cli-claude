@@ -13,23 +13,15 @@ import (
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sketch"
-)
-
-const (
-	sketchSubdir  = "sketch"
-	sketchSkmName = "atb_sketchlib.skm"
-	sketchSkdName = "atb_sketchlib.skd"
-
-	sketchSkmURL = "https://osf.io/download/nwfkc/"
-	sketchSkdURL = "https://osf.io/download/92qmr/"
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
 )
 
 func sketchDir(dir string) string {
-	return filepath.Join(dir, sketchSubdir)
+	return filepath.Join(dir, sources.SketchSubdir)
 }
 
 func sketchSkmPath(dir string) string {
-	return filepath.Join(sketchDir(dir), sketchSkmName)
+	return filepath.Join(sketchDir(dir), sources.SketchSkmFilename)
 }
 
 func sketchDbPrefix(dir string) string {
@@ -37,8 +29,8 @@ func sketchDbPrefix(dir string) string {
 }
 
 func sketchDbExists(dir string) bool {
-	skm := filepath.Join(sketchDir(dir), sketchSkmName)
-	skd := filepath.Join(sketchDir(dir), sketchSkdName)
+	skm := filepath.Join(sketchDir(dir), sources.SketchSkmFilename)
+	skd := filepath.Join(sketchDir(dir), sources.SketchSkdFilename)
 	_, err1 := os.Stat(skm)
 	_, err2 := os.Stat(skd)
 	return err1 == nil && err2 == nil
@@ -116,8 +108,8 @@ This is required before running 'atb sketch query'.`,
 			fmt.Fprintln(os.Stderr, "Downloading ATB sketch database (~4.2 GB)...")
 
 			tasks := []download.FileTask{
-				{URL: sketchSkmURL, Filename: sketchSkmName},
-				{URL: sketchSkdURL, Filename: sketchSkdName},
+				{URL: sources.SketchSkmURL, Filename: sources.SketchSkmFilename},
+				{URL: sources.SketchSkdURL, Filename: sources.SketchSkdFilename},
 			}
 
 			dl := download.New(download.Config{
@@ -347,7 +339,7 @@ func newSketchInfoCmd() *cobra.Command {
 
 			sDir := sketchDir(dir)
 			var totalSize int64
-			for _, name := range []string{sketchSkmName, sketchSkdName} {
+			for _, name := range []string{sources.SketchSkmFilename, sources.SketchSkdFilename} {
 				if fi, err := os.Stat(filepath.Join(sDir, name)); err == nil {
 					totalSize += fi.Size()
 				}

@@ -12,13 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
 )
 
-const (
-	IndexURL      = "https://osf.io/download/r6gcp/"
-	IndexFilename = "all_atb_files.tsv"
-	CacheMaxAge   = 7 * 24 * time.Hour
-)
+const CacheMaxAge = 7 * 24 * time.Hour
 
 type Entry struct {
 	Project   string
@@ -46,7 +44,7 @@ func FetchIndex(cacheDir string, force bool) (*Index, error) {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
 
-	cached := filepath.Join(cacheDir, IndexFilename)
+	cached := filepath.Join(cacheDir, sources.IndexFilename)
 
 	if !force {
 		if info, err := os.Stat(cached); err == nil {
@@ -62,7 +60,7 @@ func FetchIndex(cacheDir string, force bool) (*Index, error) {
 	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Get(IndexURL)
+	resp, err := client.Get(sources.IndexURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch index: %w", err)
 	}

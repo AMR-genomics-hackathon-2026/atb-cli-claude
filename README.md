@@ -563,11 +563,17 @@ Requires Go 1.23+. Pure Go, no CGO - cross-compilation works out of the box.
 
 ## Data Sources
 
-**Metadata** (assembly, QC, ENA): [AllTheBacteria](https://allthebacteria.org) project on [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage), path: `Aggregated/Latest_2025-05/atb.metadata.202505.parquet/`
+All external URLs are defined in [`internal/sources/sources.go`](internal/sources/sources.go) -- a single file that documents every URL the tool accesses.
 
-**AMR/Stress/Virulence genes**: [AMRFinderPlus](https://github.com/ncbi/amr) results across all ATB genomes, hosted on [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage) as `amrfinderplus.parquet` (25.6M rows, 81 MB). Downloaded by `atb fetch` and automatically partitioned by genus with per-genus SQLite indexes for instant queries.
-
-**Full file index**: [all_atb_files.tsv](https://osf.io/r6gcp/) catalogs ~3,000 files across the entire ATB project with OSF download URLs and MD5 checksums. Used by `atb osf ls` and `atb osf download`.
+| Data | Source | Used by |
+|------|--------|---------|
+| **Parquet metadata** (assembly, QC, species, MLST, AMR) | [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage) `Aggregated/Latest_2025-05/` | `atb fetch` |
+| **ENA metadata** (geography, platform, dates) | Same OSF project, optional tables | `atb fetch --all` |
+| **AMR/Stress/Virulence genes** | [AMRFinderPlus](https://github.com/ncbi/amr) results as `amrfinderplus.parquet` (25.6M rows, 81 MB) | `atb amr` |
+| **OSF file index** | [all_atb_files.tsv](https://osf.io/r6gcp/) (~3,000 files, 75+ categories) | `atb osf ls`, `atb osf download` |
+| **Sketch database** | Same OSF project, `atb_sketchlib.aggregated.202408` (.skm + .skd, ~4.2 GB) | `atb sketch fetch` |
+| **Genome assemblies** | `allthebacteria-assemblies.s3.eu-west-2.amazonaws.com` | `atb download`, `atb sketch query --download` |
+| **sketchlib binary** | [bacpop/sketchlib.rust](https://github.com/bacpop/sketchlib.rust/releases) (Linux/macOS) | `atb sketch install` |
 
 ## License
 
