@@ -1,10 +1,37 @@
 # atb-cli
 
-A command-line tool for querying the [AllTheBacteria](https://osf.io/xv7q9/) genomics database (~3.2M bacterial genomes), searching AMR/stress/virulence genes, and downloading genome assemblies.
+A command-line tool for querying the [AllTheBacteria](https://osf.io/xv7q9/) genomics database (~3.2M bacterial genomes), searching AMR/stress/virulence genes, finding closest genomes via sketch distances, and downloading genome assemblies.
 
 Single binary, no dependencies.
 
 **Supported platforms:** Linux, macOS, Windows (amd64 and arm64)
+
+## Table of Contents
+
+- [Download](#download)
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [Updating](#updating)
+- [Usage Examples](#usage-examples)
+  - [Query genomes by species](#query-genomes-by-species)
+  - [Filter by geography and platform](#filter-by-geography-and-platform-requires-ena-tables)
+  - [Use a TOML filter file](#use-a-toml-filter-file-reproducible-queries)
+  - [Get sample details](#get-sample-details)
+  - [Download genome assemblies](#download-genome-assemblies)
+  - [Summary statistics](#summary-statistics)
+  - [Query AMR genes](#query-amr-genes)
+  - [Query MLST](#query-mlst-multi-locus-sequence-typing)
+  - [Find closest genomes (sketch)](#find-closest-genomes-sketch)
+  - [Browse and download ATB files from OSF](#browse-and-download-atb-files-from-osf)
+  - [Fetch the database](#fetch-the-database)
+  - [Configuration](#configuration)
+- [LLM Integration (MCP)](#llm-integration-mcp)
+- [Output Formats](#output-formats)
+- [Available Columns](#available-columns)
+- [Performance](#performance)
+- [Building](#building)
+- [Data Sources](#data-sources)
+- [License](#license)
 
 ## Download
 
@@ -322,6 +349,56 @@ atb mlst --species "Escherichia coli" --st 131 --format csv -o st131.csv
 MLST output columns: `sample_accession`, `sylph_species`, `mlst_scheme`, `mlst_st`, `mlst_status`, `mlst_score`, `mlst_alleles`
 
 MLST status values: `PERFECT` (exact match), `NOVEL` (new combination), `OK` (partial), `MIXED`, `BAD`, `MISSING`, `NONE`
+
+### Find closest genomes (sketch)
+
+Find the closest genomes in the ATB database to your input sequences using MinHash sketch distances via [sketchlib](https://github.com/bacpop/sketchlib.rust). Results include ANI (Average Nucleotide Identity) and enriched metadata.
+
+**Linux/macOS only** -- sketchlib binaries are not available for Windows.
+
+```bash
+# 1. Install sketchlib (one-time, downloads binary next to atb)
+atb sketch install
+
+# 2. Download the ATB sketch database (~4.2 GB, one-time)
+atb sketch fetch
+
+# 3. Query your genome against ~3.2M ATB genomes
+atb sketch query my_genome.fasta
+
+# Top 50 closest matches
+atb sketch query my_genome.fasta --knn 50
+
+# Multiple input files
+atb sketch query sample1.fasta sample2.fasta
+
+# Batch from a file list
+atb sketch query -f input_list.txt
+
+# Find closest genomes AND download their assemblies
+atb sketch query my_genome.fasta --download ./closest_genomes
+
+# Preview downloads without actually downloading
+atb sketch query my_genome.fasta --download ./closest --dry-run
+
+# Raw sketchlib output (no metadata enrichment)
+atb sketch query my_genome.fasta --raw
+
+# JSON output
+atb sketch query my_genome.fasta --format json
+```
+
+Output columns: `query`, `sample_accession`, `ani`, `species`, `N50`, `completeness`, `mlst_st`
+
+When `--download` is used, the output directory will contain:
+- Downloaded genome FASTA files (`.fa.gz`)
+- `sketch_results.tsv` -- full query results with download URLs
+- `manifest.json` -- download summary (consistent with `atb download`)
+
+```bash
+# Show info about the local sketch database
+atb sketch info
+```
 
 ### Browse and download ATB files from OSF
 
