@@ -248,20 +248,26 @@ func copyFile(src, dst string) error {
 
 // CheckInBackground performs a non-blocking update check and prints a notice
 // if a newer version is available. Call from root command PersistentPreRun.
-func CheckInBackground(currentVersion string, w io.Writer) {
+//
+// Returns a function that waits (up to a short timeout) for the background
+// check to finish. The caller should defer this in main() so the goroutine
+// has time to save its state before the process exits.
+func CheckInBackground(currentVersion string, w io.Writer) func() {
+	noop := func() {}
+
 	state := loadState()
 	if time.Since(state.LastChecked) < checkInterval {
-		// Already checked recently, just show notice if we found one
-		if state.LatestVersion != "" && CompareVersions(currentVersion, state.LatestVersion) && !state.NotifiedUser {
+		// Already checked recently — show notice if a newer version was found.
+		if state.LatestVersion != "" && CompareVersions(currentVersion, state.LatestVersion) {
 			printUpdateNotice(w, currentVersion, state)
-			state.NotifiedUser = true
-			saveState(state)
 		}
-		return
+		return noop
 	}
 
-	// Check in background goroutine - don't block the command
+	// Check in a background goroutine so the actual command is not blocked.
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		release, err := FetchLatestRelease()
 		if err != nil {
 			return // silently fail
@@ -270,9 +276,21 @@ func CheckInBackground(currentVersion string, w io.Writer) {
 		state.LatestVersion = release.TagName
 		state.ReleaseNotes = release.Body
 		state.ReleaseURL = release.HTMLURL
-		state.NotifiedUser = false
 		saveState(state)
+
+		if CompareVersions(currentVersion, release.TagName) {
+			printUpdateNotice(w, currentVersion, state)
+		}
 	}()
+
+	// Return a wait function: gives the goroutine up to 2 seconds to finish
+	// so the state file is written before the process exits.
+	return func() {
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 func printUpdateNotice(w io.Writer, currentVersion string, state UpdateState) {

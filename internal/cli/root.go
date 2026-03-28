@@ -10,6 +10,10 @@ import (
 var (
 	cfgFile string
 	dataDir string
+
+	// WaitForUpdateCheck is set by PersistentPreRun. Call it before exiting
+	// main() to give the background update check time to save state.
+	WaitForUpdateCheck func()
 )
 
 // RootCmd is the base command for atb.
@@ -43,7 +47,7 @@ func init() {
 		if originalPreRun != nil {
 			originalPreRun(cmd, args)
 		}
-		selfupdate.CheckInBackground(cmd.Root().Version, os.Stderr)
+		WaitForUpdateCheck = selfupdate.CheckInBackground(cmd.Root().Version, os.Stderr)
 	}
 }
 
