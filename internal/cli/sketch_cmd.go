@@ -51,17 +51,38 @@ func newSketchCmd() *cobra.Command {
 		Long: `Find the closest genomes in the AllTheBacteria database to your input
 sequences using MinHash sketch distances (via sketchlib).
 
-Requires the sketchlib binary (Linux/macOS only, not available on Windows):
-  Pre-built: https://github.com/bacpop/sketchlib.rust/releases/latest
-  Cargo:     cargo install sketchlib
-  Conda:     conda install -c bioconda sketchlib`,
+Requires sketchlib (Linux/macOS only). Run 'atb sketch install' to download it.`,
 	}
 
+	cmd.AddCommand(newSketchInstallCmd())
 	cmd.AddCommand(newSketchFetchCmd())
 	cmd.AddCommand(newSketchQueryCmd())
 	cmd.AddCommand(newSketchInfoCmd())
 
 	return cmd
+}
+
+func newSketchInstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install",
+		Short: "Download the sketchlib binary (Linux/macOS only)",
+		Long: `Download the sketchlib binary from GitHub releases and install it
+alongside the atb binary. This is required for 'atb sketch query'.
+
+Not available on Windows.`,
+		Example: `  atb sketch install`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check if already installed
+			if path, err := sketch.FindBinary(); err == nil {
+				fmt.Fprintf(os.Stderr, "sketchlib already installed at %s\n", path)
+				return nil
+			}
+
+			return sketch.InstallBinary(func(msg string) {
+				fmt.Fprintln(os.Stderr, msg)
+			})
+		},
+	}
 }
 
 func newSketchFetchCmd() *cobra.Command {
