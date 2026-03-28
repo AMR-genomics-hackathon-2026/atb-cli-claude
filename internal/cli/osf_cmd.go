@@ -129,7 +129,7 @@ With a positional argument, shows files in projects matching that substring.`,
 	cmd.Flags().StringVar(&grep, "grep", "", "regex filter across project+filename")
 	cmd.Flags().StringVar(&project, "project", "", "filter by exact project prefix")
 	cmd.Flags().StringVar(&sortBy, "sort", "", "sort order: name (default) or size")
-	cmd.Flags().StringVar(&format, "format", "tsv", "output format: tsv, csv, json, table")
+	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table (default: table in terminal, tsv in pipe)")
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-download the index even if cached")
 
 	return cmd
@@ -307,36 +307,51 @@ Use --project to filter by project prefix first.`,
 
 func printProjectSummary(cmd *cobra.Command, idx *osf.Index, format string) error {
 	projects := idx.Projects()
+	resolved := output.ResolveFormat(format)
 
-	columns := []string{"project", "files", "total_mb"}
+	columns := []string{"project", "files", "size"}
 	rows := make([]output.Row, len(projects))
 	for i, p := range projects {
 		rows[i] = output.Row{
-			"project":  p.Project,
-			"files":    fmt.Sprintf("%d", p.FileCount),
-			"total_mb": fmt.Sprintf("%.1f", p.TotalMB),
+			"project": p.Project,
+			"files":   fmt.Sprintf("%d", p.FileCount),
+			"size":    humanSize(p.TotalMB),
 		}
 	}
 
 	fmt.Fprintf(os.Stderr, "%d projects, %d files total\n\n", len(projects), len(idx.Entries))
-	return output.Format(cmd.OutOrStdout(), rows, columns, format)
+	return output.Format(cmd.OutOrStdout(), rows, columns, resolved)
 }
 
 func printEntries(cmd *cobra.Command, entries []osf.Entry, format string) error {
-	columns := []string{"project", "filename", "size_mb", "url", "md5"}
+	resolved := output.ResolveFormat(format)
+
+	columns := []string{"project", "filename", "size", "url"}
 	rows := make([]output.Row, len(entries))
 	for i, e := range entries {
 		rows[i] = output.Row{
 			"project":  e.Project,
 			"filename": e.Filename,
-			"size_mb":  fmt.Sprintf("%.2f", e.SizeMB),
+			"size":     humanSize(e.SizeMB),
 			"url":      e.URL,
-			"md5":      e.MD5,
 		}
 	}
 
 	fmt.Fprintf(os.Stderr, "%d file(s)\n\n", len(entries))
-	return output.Format(cmd.OutOrStdout(), rows, columns, format)
+	return output.Format(cmd.OutOrStdout(), rows, columns, resolved)
+}
+
+func humanSize(mb float64) string {
+	switch {
+	case mb >= 1024:
+		return fmt.Sprintf("%.1f GB", mb/1024)
+	case mb >= 1:
+		return fmt.Sprintf("%.1f MB", mb)
+	case mb > 0:
+		return fmt.Sprintf("%.0f KB", mb*1024)
+	default:
+		return "0 B"
+	}
 }
 
 func deduplicateEntries(entries []osf.Entry) []osf.Entry {
