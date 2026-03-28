@@ -323,6 +323,36 @@ MLST output columns: `sample_accession`, `sylph_species`, `mlst_scheme`, `mlst_s
 
 MLST status values: `PERFECT` (exact match), `NOVEL` (new combination), `OK` (partial), `MIXED`, `BAD`, `MISSING`, `NONE`
 
+### Browse and download ATB files from OSF
+
+The AllTheBacteria project hosts ~3,000 files on [OSF](https://osf.io/h7wzy/) across 75+ categories (assemblies, annotations, AMR, MLST, protein structures, and more). Browse and download them directly:
+
+```bash
+# List all project categories
+atb osf ls
+
+# Find files matching a keyword
+atb osf ls AMR
+atb osf ls "Protein Structures"
+
+# Regex search across project and filename
+atb osf ls --grep "bakta.*batch"
+
+# Sort by size, different output formats
+atb osf ls AMR --sort size --format json
+
+# Preview what would be downloaded
+atb osf download --dry-run "AMRFinderPlus.*results.*latest"
+
+# Download with MD5 verification
+atb osf download --verify "DefenseFinder.*results"
+
+# Download all files in a project
+atb osf download --project AllTheBacteria/MLST --all -o ./mlst_data
+```
+
+The file index is cached locally and refreshed every 7 days. Use `--refresh` to force an update.
+
 ### Fetch the database
 
 ```bash
@@ -536,6 +566,8 @@ Requires Go 1.23+. Pure Go, no CGO - cross-compilation works out of the box.
 **Metadata** (assembly, QC, ENA): [AllTheBacteria](https://allthebacteria.org) project on [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage), path: `Aggregated/Latest_2025-05/atb.metadata.202505.parquet/`
 
 **AMR/Stress/Virulence genes**: [AMRFinderPlus](https://github.com/ncbi/amr) results across all ATB genomes, hosted on [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage) as `amrfinderplus.parquet` (25.6M rows, 81 MB). Downloaded by `atb fetch` and automatically partitioned by genus with per-genus SQLite indexes for instant queries.
+
+**Full file index**: [all_atb_files.tsv](https://osf.io/r6gcp/) catalogs ~3,000 files across the entire ATB project with OSF download URLs and MD5 checksums. Used by `atb osf ls` and `atb osf download`.
 
 ## License
 
