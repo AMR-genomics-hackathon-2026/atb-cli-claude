@@ -5,6 +5,8 @@ import (
 	"io"
 	"sort"
 
+	"github.com/dustin/go-humanize"
+
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
 )
 
@@ -66,8 +68,8 @@ func GroupBy(rows []query.ResultRow, dimension string) []GroupCount {
 // PrintSummary writes a formatted default summary report to w.
 // topN controls how many top species and datasets are shown.
 func PrintSummary(w io.Writer, s Summary, topN int) {
-	fmt.Fprintf(w, "Total genomes:      %d\n", s.Total)
-	fmt.Fprintf(w, "High-quality (HQ):  %d", s.HQCount)
+	fmt.Fprintf(w, "Total genomes:      %s\n", humanize.Comma(int64(s.Total)))
+	fmt.Fprintf(w, "High-quality (HQ):  %s", humanize.Comma(int64(s.HQCount)))
 	if s.Total > 0 {
 		pct := float64(s.HQCount) / float64(s.Total) * 100
 		fmt.Fprintf(w, " (%.1f%%)", pct)
@@ -85,7 +87,7 @@ func PrintSummary(w io.Writer, s Summary, topN int) {
 			if name == "" {
 				name = "(unclassified)"
 			}
-			fmt.Fprintf(w, "  %-50s %d\n", name, g.Count)
+			fmt.Fprintf(w, "  %-50s %10s\n", name, humanize.Comma(int64(g.Count)))
 		}
 	}
 
@@ -100,7 +102,7 @@ func PrintSummary(w io.Writer, s Summary, topN int) {
 			if name == "" {
 				name = "(unknown)"
 			}
-			fmt.Fprintf(w, "  %-30s %d\n", name, g.Count)
+			fmt.Fprintf(w, "  %-30s %10s\n", name, humanize.Comma(int64(g.Count)))
 		}
 	}
 }
@@ -117,6 +119,6 @@ func PrintGroupBy(w io.Writer, groups []GroupCount, dimension string, topN int) 
 		if name == "" {
 			name = "(empty)"
 		}
-		fmt.Fprintf(w, "  %3d. %-50s %d\n", i+1, name, g.Count)
+		fmt.Fprintf(w, "  %3d. %-50s %10s\n", i+1, name, humanize.Comma(int64(g.Count)))
 	}
 }
