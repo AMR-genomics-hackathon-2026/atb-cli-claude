@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -22,8 +21,6 @@ const (
 
 	sketchSkmURL = "https://osf.io/download/nwfkc/"
 	sketchSkdURL = "https://osf.io/download/92qmr/"
-	sketchSkmMD5 = ""
-	sketchSkdMD5 = ""
 )
 
 func sketchDir(dir string) string {
@@ -88,10 +85,7 @@ Not available on Windows.`,
 }
 
 func newSketchFetchCmd() *cobra.Command {
-	var (
-		force  bool
-		verify bool
-	)
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "fetch",
@@ -99,7 +93,7 @@ func newSketchFetchCmd() *cobra.Command {
 		Long: `Download the AllTheBacteria sketch database (~4.2 GB) from OSF.
 This is required before running 'atb sketch query'.`,
 		Example: `  atb sketch fetch
-  atb sketch fetch --force --verify`,
+  atb sketch fetch --force`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
@@ -123,10 +117,6 @@ This is required before running 'atb sketch query'.`,
 			tasks := []download.FileTask{
 				{URL: sketchSkmURL, Filename: sketchSkmName},
 				{URL: sketchSkdURL, Filename: sketchSkdName},
-			}
-			if verify {
-				tasks[0].MD5 = sketchSkmMD5
-				tasks[1].MD5 = sketchSkdMD5
 			}
 
 			dl := download.New(download.Config{
@@ -164,7 +154,6 @@ This is required before running 'atb sketch query'.`,
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "re-download even if database exists")
-	cmd.Flags().BoolVar(&verify, "verify", false, "verify MD5 checksums after download")
 
 	return cmd
 }
@@ -283,18 +272,30 @@ Identity) and metadata from the local ATB index.`,
 
 			fmt.Fprintf(os.Stderr, "%d match(es) found.\n\n", len(matches))
 
+			// Open database once for both display and download
+			var db *idx.DB
+			if !raw || downloadDir != "" {
+				if idx.Exists(dir) {
+					if d, err := idx.Open(dir); err == nil {
+						db = d
+						defer db.Close()
+					}
+				}
+			}
+
 			if raw {
 				if err := printRawMatches(cmd, matches, format); err != nil {
 					return err
 				}
 			} else {
-				if err := printEnrichedMatches(cmd, matches, dir, format); err != nil {
+				enriched := enrichMatches(matches, db)
+				if err := printMatchRows(cmd, enriched, format); err != nil {
 					return err
 				}
 			}
 
 			if downloadDir != "" {
-				return downloadMatchedGenomes(cmd, matches, dir, downloadDir, cfg, dryRun)
+				return downloadMatchedGenomes(cmd, matches, db, downloadDir, cfg, dryRun)
 			}
 
 			return nil
@@ -303,7 +304,7 @@ Identity) and metadata from the local ATB index.`,
 
 	cmd.Flags().StringVarP(&fileList, "file-list", "f", "", "file with one FASTA path per line")
 	cmd.Flags().IntVar(&knn, "knn", 10, "number of closest matches to return")
-	cmd.Flags().IntVar(&threads, "threads", 0, "CPU threads (default: all available)")
+	cmd.Flags().IntVar(&threads, "threads", 0, "CPU threads (default: all cores minus one)")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table (default: auto)")
 	cmd.Flags().BoolVar(&raw, "raw", false, "output raw distances without metadata enrichment")
 	cmd.Flags().StringVar(&downloadDir, "download", "", "download matched genomes to this directory")
@@ -371,19 +372,9 @@ func printRawMatches(cmd *cobra.Command, matches []sketch.Match, format string) 
 	return output.Format(cmd.OutOrStdout(), rows, columns, resolved)
 }
 
-func printEnrichedMatches(cmd *cobra.Command, matches []sketch.Match, dir, format string) error {
-	resolved := output.ResolveFormat(format)
-
-	var db *idx.DB
-	if idx.Exists(dir) {
-		var err error
-		db, err = idx.Open(dir)
-		if err == nil {
-			defer db.Close()
-		}
-	}
-
-	columns := []string{"query", "sample_accession", "ani", "species", "N50", "completeness", "mlst_st"}
+// enrichMatches looks up metadata for each match from the SQLite index.
+// db may be nil, in which case all metadata fields are "-".
+func enrichMatches(matches []sketch.Match, db *idx.DB) []output.Row {
 	rows := make([]output.Row, len(matches))
 	for i, m := range matches {
 		row := output.Row{
@@ -394,54 +385,46 @@ func printEnrichedMatches(cmd *cobra.Command, matches []sketch.Match, dir, forma
 			"N50":              "-",
 			"completeness":     "-",
 			"mlst_st":          "-",
+			"aws_url":          "-",
 		}
-
 		if db != nil {
 			if info, err := db.InfoRow(m.RefName); err == nil {
-				if v := info["sylph_species"]; v != "" {
-					row["species"] = v
-				}
-				if v := info["N50"]; v != "" {
-					row["N50"] = v
-				}
-				if v := info["Completeness_General"]; v != "" {
-					row["completeness"] = v
-				}
-				if v := info["mlst_st"]; v != "" {
-					row["mlst_st"] = v
+				for _, kv := range []struct{ key, col string }{
+					{"sylph_species", "species"},
+					{"N50", "N50"},
+					{"Completeness_General", "completeness"},
+					{"mlst_st", "mlst_st"},
+					{"aws_url", "aws_url"},
+				} {
+					if v := info[kv.key]; v != "" {
+						row[kv.col] = v
+					}
 				}
 			}
 		}
-
 		rows[i] = row
 	}
-
-	return output.Format(cmd.OutOrStdout(), rows, columns, resolved)
+	return rows
 }
 
-func downloadMatchedGenomes(cmd *cobra.Command, matches []sketch.Match, dataDir, outputDir string, cfg config.Config, dryRun bool) error {
-	var db *idx.DB
-	if idx.Exists(dataDir) {
-		var err error
-		db, err = idx.Open(dataDir)
-		if err == nil {
-			defer db.Close()
-		}
-	}
+var matchDisplayColumns = []string{"query", "sample_accession", "ani", "species", "N50", "completeness", "mlst_st"}
+
+func printMatchRows(cmd *cobra.Command, rows []output.Row, format string) error {
+	return output.Format(cmd.OutOrStdout(), rows, matchDisplayColumns, output.ResolveFormat(format))
+}
+
+func downloadMatchedGenomes(cmd *cobra.Command, matches []sketch.Match, db *idx.DB, outputDir string, cfg config.Config, dryRun bool) error {
 	if db == nil {
 		return fmt.Errorf("ATB index not found; run 'atb fetch' first to enable genome downloads")
 	}
 
+	enriched := enrichMatches(matches, db)
+
 	var tasks []download.FileTask
-	for _, m := range matches {
-		info, err := db.InfoRow(m.RefName)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  skip %s: not found in index\n", m.RefName)
-			continue
-		}
-		url := info["aws_url"]
-		if url == "" {
-			fmt.Fprintf(os.Stderr, "  skip %s: no download URL\n", m.RefName)
+	for _, row := range enriched {
+		url := row["aws_url"]
+		if url == "" || url == "-" {
+			fmt.Fprintf(os.Stderr, "  skip %s: no download URL\n", row["sample_accession"])
 			continue
 		}
 		tasks = append(tasks, download.FileTask{
@@ -472,7 +455,8 @@ func downloadMatchedGenomes(cmd *cobra.Command, matches []sketch.Match, dataDir,
 	if err != nil {
 		return fmt.Errorf("create results file: %w", err)
 	}
-	if err := writeEnrichedResults(resultsFile, matches, db); err != nil {
+	resultsCols := append(matchDisplayColumns, "aws_url")
+	if err := output.Format(resultsFile, enriched, resultsCols, "tsv"); err != nil {
 		resultsFile.Close()
 		return fmt.Errorf("write results: %w", err)
 	}
@@ -524,44 +508,4 @@ func downloadMatchedGenomes(cmd *cobra.Command, matches []sketch.Match, dataDir,
 	}
 
 	return nil
-}
-
-// writeEnrichedResults writes the query results as TSV to w, consistent with
-// the default stdout output format.
-func writeEnrichedResults(w io.Writer, matches []sketch.Match, db *idx.DB) error {
-	columns := []string{"query", "sample_accession", "ani", "species", "N50", "completeness", "mlst_st", "aws_url"}
-	rows := make([]output.Row, len(matches))
-	for i, m := range matches {
-		row := output.Row{
-			"query":            m.QueryName,
-			"sample_accession": m.RefName,
-			"ani":              fmt.Sprintf("%.4f", m.ANI),
-			"species":          "-",
-			"N50":              "-",
-			"completeness":     "-",
-			"mlst_st":          "-",
-			"aws_url":          "-",
-		}
-		if db != nil {
-			if info, err := db.InfoRow(m.RefName); err == nil {
-				if v := info["sylph_species"]; v != "" {
-					row["species"] = v
-				}
-				if v := info["N50"]; v != "" {
-					row["N50"] = v
-				}
-				if v := info["Completeness_General"]; v != "" {
-					row["completeness"] = v
-				}
-				if v := info["mlst_st"]; v != "" {
-					row["mlst_st"] = v
-				}
-				if v := info["aws_url"]; v != "" {
-					row["aws_url"] = v
-				}
-			}
-		}
-		rows[i] = row
-	}
-	return output.Format(w, rows, columns, "tsv")
 }
