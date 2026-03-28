@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
@@ -60,10 +61,10 @@ func newInfoCmd() *cobra.Command {
 
 						if row["N50"] != "" {
 							fmt.Fprintln(w, "=== Assembly Stats ===")
-							fmt.Fprintf(w, "  total_length: %s\n", row["total_length"])
-							fmt.Fprintf(w, "  number:       %s\n", row["number"])
-							fmt.Fprintf(w, "  N50:          %s\n", row["N50"])
-							fmt.Fprintf(w, "  N90:          %s\n", row["N90"])
+							fmt.Fprintf(w, "  total_length: %s\n", commaStr(row["total_length"]))
+							fmt.Fprintf(w, "  number:       %s\n", commaStr(row["number"]))
+							fmt.Fprintf(w, "  N50:          %s\n", commaStr(row["N50"]))
+							fmt.Fprintf(w, "  N90:          %s\n", commaStr(row["N90"]))
 							fmt.Fprintln(w)
 						}
 
@@ -71,7 +72,7 @@ func newInfoCmd() *cobra.Command {
 							fmt.Fprintln(w, "=== CheckM2 Quality ===")
 							fmt.Fprintf(w, "  completeness_general: %s\n", row["Completeness_General"])
 							fmt.Fprintf(w, "  contamination:        %s\n", row["Contamination"])
-							fmt.Fprintf(w, "  genome_size:          %s\n", row["Genome_Size"])
+							fmt.Fprintf(w, "  genome_size:          %s\n", commaStr(row["Genome_Size"]))
 							fmt.Fprintf(w, "  gc_content:           %s\n", row["GC_Content"])
 							fmt.Fprintln(w)
 						}
@@ -131,13 +132,13 @@ func newInfoCmd() *cobra.Command {
 				} else if len(rows) > 0 {
 					s := rows[0]
 					fmt.Fprintln(w, "=== Assembly Stats ===")
-					fmt.Fprintf(w, "  total_length: %d\n", s.TotalLength)
-					fmt.Fprintf(w, "  number:       %d\n", s.Number)
+					fmt.Fprintf(w, "  total_length: %s\n", humanize.Comma(s.TotalLength))
+					fmt.Fprintf(w, "  number:       %s\n", humanize.Comma(int64(s.Number)))
 					fmt.Fprintf(w, "  mean_length:  %.2f\n", s.MeanLength)
-					fmt.Fprintf(w, "  longest:      %d\n", s.Longest)
-					fmt.Fprintf(w, "  shortest:     %d\n", s.Shortest)
-					fmt.Fprintf(w, "  N50:          %d\n", s.N50)
-					fmt.Fprintf(w, "  N90:          %d\n", s.N90)
+					fmt.Fprintf(w, "  longest:      %s\n", humanize.Comma(s.Longest))
+					fmt.Fprintf(w, "  shortest:     %s\n", humanize.Comma(s.Shortest))
+					fmt.Fprintf(w, "  N50:          %s\n", humanize.Comma(s.N50))
+					fmt.Fprintf(w, "  N90:          %s\n", humanize.Comma(s.N90))
 					fmt.Fprintln(w)
 				}
 			}
@@ -177,8 +178,8 @@ func newInfoCmd() *cobra.Command {
 					fmt.Fprintf(w, "  collection_date:     %s\n", e.CollectionDate)
 					fmt.Fprintf(w, "  instrument_platform: %s\n", e.InstrumentPlatform)
 					fmt.Fprintf(w, "  instrument_model:    %s\n", e.InstrumentModel)
-					fmt.Fprintf(w, "  read_count:          %d\n", e.ReadCount)
-					fmt.Fprintf(w, "  base_count:          %d\n", e.BaseCount)
+					fmt.Fprintf(w, "  read_count:          %s\n", humanize.Comma(e.ReadCount))
+					fmt.Fprintf(w, "  base_count:          %s\n", humanize.Comma(e.BaseCount))
 					fmt.Fprintf(w, "  library_strategy:    %s\n", e.LibraryStrategy)
 					fmt.Fprintf(w, "  study_accession:     %s\n", e.StudyAccession)
 					fmt.Fprintf(w, "  fastq_ftp:           %s\n", e.FastqFTP)

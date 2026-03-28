@@ -128,8 +128,8 @@ func newDownloadCmd() *cobra.Command {
 
 			result := dl.DownloadAll(urls)
 
-			fmt.Fprintf(os.Stderr, "Completed: %d/%d  Failed: %d  Bytes: %d\n",
-				result.Completed, result.Total, result.Failed, result.Bytes)
+			fmt.Fprintf(os.Stderr, "Completed: %d/%d  Failed: %d  Bytes: %s\n",
+				result.Completed, result.Total, result.Failed, formatSize(result.Bytes))
 
 			for _, e := range result.Errors {
 				fmt.Fprintf(os.Stderr, "  error: %s: %s\n", e.URL, e.Error)

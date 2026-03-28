@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
@@ -239,6 +241,20 @@ func reportDatabaseSummary(dir string) {
 	}
 	total := parquetSize + indexSize + partitionSize
 	fmt.Fprintf(os.Stderr, "  Total:           %s\n", formatSize(total))
+}
+
+// commaStr formats a numeric string with thousand separators.
+// Non-numeric strings are returned as-is.
+func commaStr(s string) string {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		// Try float (e.g. "99.06")
+		if _, ferr := strconv.ParseFloat(s, 64); ferr == nil {
+			return s // floats don't get commas
+		}
+		return s
+	}
+	return humanize.Comma(n)
 }
 
 func formatSize(bytes int64) string {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
@@ -252,7 +253,7 @@ Identity) and metadata from the local ATB index.`,
 			}
 			defer os.RemoveAll(tmpDir)
 
-			fmt.Fprintf(os.Stderr, "Querying ATB database (%d genomes)...\n", dbInfo.Samples)
+			fmt.Fprintf(os.Stderr, "Querying ATB database (%s genomes)...\n", humanize.Comma(int64(dbInfo.Samples)))
 
 			kmer := dbInfo.KmerSizes[len(dbInfo.KmerSizes)-1]
 			matches, err := sketch.QueryDist(sketchDbPrefix(dir), queryPrefix, kmer, threads, knn)
@@ -340,9 +341,9 @@ func newSketchInfoCmd() *cobra.Command {
 
 			w := cmd.OutOrStdout()
 			fmt.Fprintf(w, "Sketch database: %s\n", sketchSkmPath(dir))
-			fmt.Fprintf(w, "Samples:         %d\n", info.Samples)
+			fmt.Fprintf(w, "Samples:         %s\n", humanize.Comma(int64(info.Samples)))
 			fmt.Fprintf(w, "K-mer sizes:     %v\n", info.KmerSizes)
-			fmt.Fprintf(w, "Sketch size:     %d\n", info.SketchSize)
+			fmt.Fprintf(w, "Sketch size:     %s\n", humanize.Comma(int64(info.SketchSize)))
 
 			sDir := sketchDir(dir)
 			var totalSize int64

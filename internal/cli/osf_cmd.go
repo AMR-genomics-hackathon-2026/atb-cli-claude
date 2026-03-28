@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/download"
@@ -319,7 +320,7 @@ func printProjectSummary(cmd *cobra.Command, idx *osf.Index, format string) erro
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "%d projects, %d files total\n\n", len(projects), len(idx.Entries))
+	fmt.Fprintf(os.Stderr, "%d projects, %s files total\n\n", len(projects), humanize.Comma(int64(len(idx.Entries))))
 	return output.Format(cmd.OutOrStdout(), rows, columns, resolved)
 }
 
