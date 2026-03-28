@@ -305,6 +305,35 @@ func (d *DB) SpeciesList(limit int) ([]SpeciesCount, error) {
 	return results, rows.Err()
 }
 
+// SpeciesCountList returns species sorted by descending sample count, with an
+// optional HQ-only filter. limit controls the maximum number returned (0 = all).
+// Callers can request a larger limit to allow downstream filtering of placeholders.
+func (d *DB) SpeciesCountList(limit int, hqOnly bool) ([]SpeciesCount, error) {
+	where := "WHERE sylph_species != '' AND sylph_species != 'unknown'"
+	if hqOnly {
+		where += " AND hq_filter = 'PASS'"
+	}
+	q := fmt.Sprintf("SELECT sylph_species, COUNT(*) as cnt FROM samples %s GROUP BY sylph_species ORDER BY cnt DESC", where)
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := d.db.Query(q)
+	if err != nil {
+		return nil, fmt.Errorf("species count query: %w", err)
+	}
+	defer rows.Close()
+
+	var results []SpeciesCount
+	for rows.Next() {
+		var sc SpeciesCount
+		if err := rows.Scan(&sc.Species, &sc.Count); err != nil {
+			return nil, fmt.Errorf("scanning species row: %w", err)
+		}
+		results = append(results, sc)
+	}
+	return results, rows.Err()
+}
+
 // Stats holds summary statistics for the database.
 type Stats struct {
 	Total      int

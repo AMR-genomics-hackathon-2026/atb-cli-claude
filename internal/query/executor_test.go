@@ -168,3 +168,73 @@ func TestSortResultsEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestShuffleResultsDeterministic(t *testing.T) {
+	makeRows := func() []ResultRow {
+		rows := make([]ResultRow, 10)
+		for i := range rows {
+			rows[i] = ResultRow{"sample_accession": "SAMN" + strconv.Itoa(i)}
+		}
+		return rows
+	}
+
+	// Two shuffles with the same seed must produce the same order.
+	r1 := makeRows()
+	r2 := makeRows()
+	ShuffleResults(r1, 42)
+	ShuffleResults(r2, 42)
+	for i := range r1 {
+		if r1[i]["sample_accession"] != r2[i]["sample_accession"] {
+			t.Errorf("shuffle with same seed gave different results at index %d: %q vs %q",
+				i, r1[i]["sample_accession"], r2[i]["sample_accession"])
+		}
+	}
+}
+
+func TestShuffleResultsDifferentSeeds(t *testing.T) {
+	makeRows := func() []ResultRow {
+		rows := make([]ResultRow, 10)
+		for i := range rows {
+			rows[i] = ResultRow{"sample_accession": "SAMN" + strconv.Itoa(i)}
+		}
+		return rows
+	}
+
+	r1 := makeRows()
+	r2 := makeRows()
+	ShuffleResults(r1, 42)
+	ShuffleResults(r2, 99)
+
+	// Extremely unlikely to be identical by chance with 10 items.
+	same := true
+	for i := range r1 {
+		if r1[i]["sample_accession"] != r2[i]["sample_accession"] {
+			same = false
+			break
+		}
+	}
+	if same {
+		t.Error("different seeds produced identical shuffle order (highly unlikely)")
+	}
+}
+
+func TestShufflePreservesLength(t *testing.T) {
+	rows := make([]ResultRow, 20)
+	for i := range rows {
+		rows[i] = ResultRow{"id": strconv.Itoa(i)}
+	}
+	ShuffleResults(rows, 1)
+	if len(rows) != 20 {
+		t.Errorf("shuffle changed row count: expected 20, got %d", len(rows))
+	}
+	// All original IDs must still be present.
+	seen := make(map[string]bool)
+	for _, r := range rows {
+		seen[r["id"]] = true
+	}
+	for i := 0; i < 20; i++ {
+		if !seen[strconv.Itoa(i)] {
+			t.Errorf("id %d missing after shuffle", i)
+		}
+	}
+}

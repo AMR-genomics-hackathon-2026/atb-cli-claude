@@ -45,6 +45,9 @@ type OutputConfig struct {
 	Offset   int      `toml:"offset"`
 	Format   string   `toml:"format"`
 	Output   string   `toml:"output"`
+	// Seed is used for reproducible random subsampling when Limit is set and
+	// no explicit SortBy is specified. A value of 0 means no seeded shuffle.
+	Seed int `toml:"seed"`
 }
 
 // LoadFilterFile parses a TOML filter file at the given path.
