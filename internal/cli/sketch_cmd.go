@@ -2,11 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/download"
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
@@ -292,7 +294,7 @@ Identity) and metadata from the local ATB index.`,
 			}
 
 			if downloadDir != "" {
-				return downloadMatchedGenomes(matches, dir, downloadDir, dryRun)
+				return downloadMatchedGenomes(cmd, matches, dir, downloadDir, cfg, dryRun)
 			}
 
 			return nil
@@ -417,7 +419,7 @@ func printEnrichedMatches(cmd *cobra.Command, matches []sketch.Match, dir, forma
 	return output.Format(cmd.OutOrStdout(), rows, columns, resolved)
 }
 
-func downloadMatchedGenomes(matches []sketch.Match, dataDir, outputDir string, dryRun bool) error {
+func downloadMatchedGenomes(cmd *cobra.Command, matches []sketch.Match, dataDir, outputDir string, cfg config.Config, dryRun bool) error {
 	var db *idx.DB
 	if idx.Exists(dataDir) {
 		var err error
@@ -456,23 +458,48 @@ func downloadMatchedGenomes(matches []sketch.Match, dataDir, outputDir string, d
 	if dryRun {
 		fmt.Fprintf(os.Stderr, "\nWould download %d genome(s) to %s:\n", len(tasks), outputDir)
 		for _, t := range tasks {
-			fmt.Fprintf(os.Stderr, "  %s\n", t.URL)
+			fmt.Fprintf(os.Stderr, "  would download: %s\n", t.URL)
 		}
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "\nDownloading %d genome(s) to %s...\n", len(tasks), outputDir)
+	// Save query results as TSV alongside the downloads
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("create output dir: %w", err)
+	}
+	resultsPath := filepath.Join(outputDir, "sketch_results.tsv")
+	resultsFile, err := os.Create(resultsPath)
+	if err != nil {
+		return fmt.Errorf("create results file: %w", err)
+	}
+	if err := writeEnrichedResults(resultsFile, matches, db); err != nil {
+		resultsFile.Close()
+		return fmt.Errorf("write results: %w", err)
+	}
+	resultsFile.Close()
+	fmt.Fprintf(os.Stderr, "\nQuery results saved to %s\n", resultsPath)
+
+	// Download genomes (consistent with atb download)
+	par := cfg.Download.Parallel
+	if par <= 0 {
+		par = 4
+	}
+
+	fmt.Fprintf(os.Stderr, "Downloading %d file(s) to %s\n", len(tasks), outputDir)
 
 	dl := download.New(download.Config{
-		OutputDir:  outputDir,
-		Parallel:   4,
-		MaxRetries: 3,
+		OutputDir:      outputDir,
+		Parallel:       par,
+		CheckDiskSpace: cfg.Download.CheckDiskSpace,
+		MinFreeSpaceGB: cfg.Download.MinFreeSpaceGB,
+		MaxRetries:     3,
 	})
 
 	dl.OnProgress = func(filename string, written, total int64) {
 		if total > 0 {
 			pct := float64(written) / float64(total) * 100
-			fmt.Fprintf(os.Stderr, "\r  %s: %.1f%%", filename, pct)
+			fmt.Fprintf(os.Stderr, "\r  %s: %.1f%% (%s / %s)",
+				filename, pct, formatSize(written), formatSize(total))
 		} else {
 			fmt.Fprintf(os.Stderr, "\r  %s: %s", filename, formatSize(written))
 		}
@@ -480,11 +507,16 @@ func downloadMatchedGenomes(matches []sketch.Match, dataDir, outputDir string, d
 
 	result := dl.DownloadAllFiles(tasks)
 
-	fmt.Fprintf(os.Stderr, "\r\033[KDownloaded: %d/%d  Bytes: %s\n",
-		result.Completed, result.Total, formatSize(result.Bytes))
+	fmt.Fprintf(os.Stderr, "\r\033[K")
+	fmt.Fprintf(os.Stderr, "Completed: %d/%d  Failed: %d  Bytes: %s\n",
+		result.Completed, result.Total, result.Failed, formatSize(result.Bytes))
 
 	for _, e := range result.Errors {
 		fmt.Fprintf(os.Stderr, "  error: %s: %s\n", e.URL, e.Error)
+	}
+
+	if err := dl.WriteManifest("atb sketch query --download", result); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to write manifest: %v\n", err)
 	}
 
 	if result.Failed > 0 {
@@ -492,4 +524,44 @@ func downloadMatchedGenomes(matches []sketch.Match, dataDir, outputDir string, d
 	}
 
 	return nil
+}
+
+// writeEnrichedResults writes the query results as TSV to w, consistent with
+// the default stdout output format.
+func writeEnrichedResults(w io.Writer, matches []sketch.Match, db *idx.DB) error {
+	columns := []string{"query", "sample_accession", "ani", "species", "N50", "completeness", "mlst_st", "aws_url"}
+	rows := make([]output.Row, len(matches))
+	for i, m := range matches {
+		row := output.Row{
+			"query":            m.QueryName,
+			"sample_accession": m.RefName,
+			"ani":              fmt.Sprintf("%.4f", m.ANI),
+			"species":          "-",
+			"N50":              "-",
+			"completeness":     "-",
+			"mlst_st":          "-",
+			"aws_url":          "-",
+		}
+		if db != nil {
+			if info, err := db.InfoRow(m.RefName); err == nil {
+				if v := info["sylph_species"]; v != "" {
+					row["species"] = v
+				}
+				if v := info["N50"]; v != "" {
+					row["N50"] = v
+				}
+				if v := info["Completeness_General"]; v != "" {
+					row["completeness"] = v
+				}
+				if v := info["mlst_st"]; v != "" {
+					row["mlst_st"] = v
+				}
+				if v := info["aws_url"]; v != "" {
+					row["aws_url"] = v
+				}
+			}
+		}
+		rows[i] = row
+	}
+	return output.Format(w, rows, columns, "tsv")
 }
