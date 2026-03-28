@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -218,5 +219,137 @@ func TestDownloadAllAggregatesErrors(t *testing.T) {
 	if len(result.Errors) != 1 {
 		t.Errorf("errors count = %d, want 1", len(result.Errors))
 	}
+}
 
+func TestDownloadFileVerifiedGoodMD5(t *testing.T) {
+	content := "hello world"
+	// MD5 of "hello world" = 5eb63bbbe01eeed093cb22bb8f5acdc3
+	expectedMD5 := "5eb63bbbe01eeed093cb22bb8f5acdc3"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, content)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	d := New(Config{OutputDir: dir, MaxRetries: 1})
+
+	err := d.DownloadFileVerified(srv.URL+"/file.txt", "file.txt", expectedMD5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dir, "file.txt"))
+	if string(got) != content {
+		t.Errorf("content = %q, want %q", string(got), content)
+	}
+}
+
+func TestDownloadFileVerifiedBadMD5(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "hello world")
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	d := New(Config{OutputDir: dir, MaxRetries: 1})
+
+	err := d.DownloadFileVerified(srv.URL+"/file.txt", "file.txt", "0000000000000000000000000000dead")
+	if err == nil {
+		t.Fatal("expected MD5 mismatch error")
+	}
+	if !strings.Contains(err.Error(), "MD5 mismatch") {
+		t.Errorf("error = %q, want MD5 mismatch", err.Error())
+	}
+
+	// File should be removed after mismatch
+	if _, err := os.Stat(filepath.Join(dir, "file.txt")); err == nil {
+		t.Error("file should have been removed after MD5 mismatch")
+	}
+}
+
+func TestDownloadFileVerifiedRedownloadsOnBadExisting(t *testing.T) {
+	content := "correct content"
+	expectedMD5 := "ee000912423a8bf8e7c5018cfed1574b" // md5("correct content")
+
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		fmt.Fprint(w, content)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	// Pre-create a file with wrong content (simulating corruption)
+	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("corrupted"), 0644)
+
+	d := New(Config{OutputDir: dir, MaxRetries: 1})
+	err := d.DownloadFileVerified(srv.URL+"/file.txt", "file.txt", expectedMD5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if callCount != 1 {
+		t.Errorf("expected 1 HTTP call to re-download, got %d", callCount)
+	}
+
+	got, _ := os.ReadFile(filepath.Join(dir, "file.txt"))
+	if string(got) != content {
+		t.Errorf("content = %q, want %q", string(got), content)
+	}
+}
+
+func TestDownloadAllFiles(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "content of %s", r.URL.Path)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	d := New(Config{OutputDir: dir, Parallel: 2, MaxRetries: 1})
+
+	tasks := []FileTask{
+		{URL: srv.URL + "/abc123/", Filename: "results.tsv.gz"},
+		{URL: srv.URL + "/def456/", Filename: "status.tsv.gz"},
+	}
+
+	result := d.DownloadAllFiles(tasks)
+	if result.Completed != 2 {
+		t.Errorf("completed = %d, want 2", result.Completed)
+	}
+	if result.Failed != 0 {
+		t.Errorf("failed = %d, want 0 (errors: %v)", result.Failed, result.Errors)
+	}
+
+	// Verify files are saved with the specified filenames, not URL basenames
+	for _, name := range []string{"results.tsv.gz", "status.tsv.gz"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Errorf("expected file %s to exist: %v", name, err)
+		}
+	}
+}
+
+func TestProgressCallback(t *testing.T) {
+	content := strings.Repeat("x", 1000)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+		fmt.Fprint(w, content)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	d := New(Config{OutputDir: dir, MaxRetries: 1})
+
+	var progressCalled int64
+	d.OnProgress = func(filename string, written, total int64) {
+		atomic.AddInt64(&progressCalled, 1)
+		if filename != "progress.txt" {
+			t.Errorf("filename = %q, want progress.txt", filename)
+		}
+	}
+
+	err := d.DownloadFile(srv.URL+"/progress.txt", "progress.txt")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

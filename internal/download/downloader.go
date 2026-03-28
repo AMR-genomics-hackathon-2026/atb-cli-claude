@@ -1,10 +1,13 @@
 package download
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,10 +25,22 @@ type Config struct {
 	MaxRetries     int
 }
 
+// FileTask describes a single file to download, with optional metadata
+// for integrity verification and proper naming.
+type FileTask struct {
+	URL      string
+	Filename string // saved as this name; falls back to filepath.Base(URL)
+	MD5      string // expected MD5 hex digest; empty to skip verification
+}
+
 // Downloader manages parallel HTTP downloads with resume and retry support.
 type Downloader struct {
 	cfg    Config
 	client *http.Client
+
+	// OnProgress is called periodically during downloads if set.
+	// Arguments: filename, bytesWritten, totalBytes (-1 if unknown).
+	OnProgress func(filename string, written, total int64)
 }
 
 // Result summarises the outcome of a DownloadAll call.
@@ -61,9 +76,23 @@ func New(cfg Config) *Downloader {
 	if cfg.Parallel == 0 {
 		cfg.Parallel = 4
 	}
+
+	// Use transport-level timeouts instead of a blanket client timeout.
+	// This avoids killing large file transfers that take longer than N minutes.
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   15 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConnsPerHost:   cfg.Parallel,
+	}
+
 	return &Downloader{
 		cfg:    cfg,
-		client: &http.Client{Timeout: 5 * time.Minute},
+		client: &http.Client{Transport: transport},
 	}
 }
 
@@ -72,22 +101,37 @@ func New(cfg Config) *Downloader {
 // .part file when one is present. Retries are performed with exponential backoff
 // for 429 and 5xx responses; 4xx (except 429) fail immediately.
 func (d *Downloader) DownloadFile(url, filename string) error {
+	return d.DownloadFileVerified(url, filename, "")
+}
+
+// DownloadFileVerified is like DownloadFile but also verifies the MD5 checksum
+// of the downloaded file when expectedMD5 is non-empty. If verification fails,
+// the file is removed and an error is returned.
+func (d *Downloader) DownloadFileVerified(url, filename, expectedMD5 string) error {
 	if err := os.MkdirAll(d.cfg.OutputDir, 0755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
 	finalPath := filepath.Join(d.cfg.OutputDir, filename)
 	if _, err := os.Stat(finalPath); err == nil {
-		return nil // already complete
+		if expectedMD5 != "" {
+			if ok, _ := verifyMD5(finalPath, expectedMD5); ok {
+				return nil // already complete and verified
+			}
+			// Checksum mismatch — re-download
+			os.Remove(finalPath)
+		} else {
+			return nil // already complete
+		}
 	}
 
 	partPath := finalPath + ".part"
 
 	var attempt int
 	for {
-		err := d.attemptDownload(url, finalPath, partPath)
+		err := d.attemptDownload(url, filename, finalPath, partPath)
 		if err == nil {
-			return nil
+			break
 		}
 
 		var de *downloadErr
@@ -103,12 +147,22 @@ func (d *Downloader) DownloadFile(url, filename string) error {
 		backoff := time.Duration(math.Pow(2, float64(attempt))) * 500 * time.Millisecond
 		time.Sleep(backoff)
 	}
+
+	if expectedMD5 != "" {
+		ok, got := verifyMD5(finalPath, expectedMD5)
+		if !ok {
+			os.Remove(finalPath)
+			return fmt.Errorf("MD5 mismatch for %s: expected %s, got %s", filename, expectedMD5, got)
+		}
+	}
+
+	return nil
 }
 
 // attemptDownload performs one HTTP request to download url into partPath and
 // renames it to finalPath on success. Returns a *downloadErr with fatal=true
 // for permanent failures (4xx except 429).
-func (d *Downloader) attemptDownload(url, finalPath, partPath string) error {
+func (d *Downloader) attemptDownload(url, filename, finalPath, partPath string) error {
 	var partSize int64
 	if info, err := os.Stat(partPath); err == nil {
 		partSize = info.Size()
@@ -136,6 +190,10 @@ func (d *Downloader) attemptDownload(url, finalPath, partPath string) error {
 		return &downloadErr{msg: fmt.Sprintf("HTTP %d", resp.StatusCode), fatal: false}
 	case resp.StatusCode >= 400:
 		return &downloadErr{msg: fmt.Sprintf("HTTP %d", resp.StatusCode), fatal: true}
+	case resp.StatusCode == http.StatusRequestedRangeNotSatisfiable:
+		// Range not satisfiable — part file may be corrupt or complete; start fresh
+		os.Remove(partPath)
+		partSize = 0
 	case resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent:
 		return &downloadErr{msg: fmt.Sprintf("unexpected HTTP %d", resp.StatusCode), fatal: true}
 	}
@@ -146,6 +204,7 @@ func (d *Downloader) attemptDownload(url, finalPath, partPath string) error {
 		flags |= os.O_APPEND
 	} else {
 		flags |= os.O_TRUNC
+		partSize = 0
 	}
 
 	f, err := os.OpenFile(partPath, flags, 0644)
@@ -153,7 +212,23 @@ func (d *Downloader) attemptDownload(url, finalPath, partPath string) error {
 		return &downloadErr{msg: err.Error(), fatal: true}
 	}
 
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	var writer io.Writer = f
+	if d.OnProgress != nil {
+		totalSize := resp.ContentLength
+		if totalSize > 0 {
+			totalSize += partSize
+		}
+		writer = &progressWriter{
+			w:        f,
+			filename: filename,
+			written:  partSize,
+			total:    totalSize,
+			callback: d.OnProgress,
+			interval: 500 * time.Millisecond,
+		}
+	}
+
+	if _, err := io.Copy(writer, resp.Body); err != nil {
 		f.Close()
 		return &downloadErr{msg: err.Error(), fatal: false}
 	}
@@ -166,10 +241,11 @@ func (d *Downloader) attemptDownload(url, finalPath, partPath string) error {
 	return nil
 }
 
-// DownloadAll downloads all urls in parallel using a goroutine pool limited by
-// cfg.Parallel. It returns a Result with counts and any per-URL errors.
-func (d *Downloader) DownloadAll(urls []string) Result {
-	result := Result{Total: len(urls)}
+// DownloadAllFiles downloads tasks in parallel. Each FileTask carries a URL,
+// filename, and optional MD5 for verification. This is the preferred method
+// when callers have file metadata (e.g., from an index).
+func (d *Downloader) DownloadAllFiles(tasks []FileTask) Result {
+	result := Result{Total: len(tasks)}
 
 	sem := make(chan struct{}, d.cfg.Parallel)
 	var mu sync.Mutex
@@ -177,19 +253,23 @@ func (d *Downloader) DownloadAll(urls []string) Result {
 	var wg sync.WaitGroup
 	var completed, failed int64
 
-	for _, rawURL := range urls {
+	for _, task := range tasks {
 		wg.Add(1)
-		go func(u string) {
+		go func(t FileTask) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			filename := filepath.Base(u)
-			err := d.DownloadFile(u, filename)
+			filename := t.Filename
+			if filename == "" {
+				filename = filepath.Base(t.URL)
+			}
+
+			err := d.DownloadFileVerified(t.URL, filename, t.MD5)
 			if err != nil {
 				atomic.AddInt64(&failed, 1)
 				mu.Lock()
-				result.Errors = append(result.Errors, DownloadError{URL: u, Error: err.Error()})
+				result.Errors = append(result.Errors, DownloadError{URL: t.URL, Error: err.Error()})
 				mu.Unlock()
 			} else {
 				atomic.AddInt64(&completed, 1)
@@ -197,7 +277,7 @@ func (d *Downloader) DownloadAll(urls []string) Result {
 					atomic.AddInt64(&bytesTotal, info.Size())
 				}
 			}
-		}(rawURL)
+		}(task)
 	}
 
 	wg.Wait()
@@ -206,6 +286,16 @@ func (d *Downloader) DownloadAll(urls []string) Result {
 	result.Failed = int(atomic.LoadInt64(&failed))
 	result.Bytes = atomic.LoadInt64(&bytesTotal)
 	return result
+}
+
+// DownloadAll downloads all urls in parallel using a goroutine pool limited by
+// cfg.Parallel. It returns a Result with counts and any per-URL errors.
+func (d *Downloader) DownloadAll(urls []string) Result {
+	tasks := make([]FileTask, len(urls))
+	for i, u := range urls {
+		tasks[i] = FileTask{URL: u, Filename: filepath.Base(u)}
+	}
+	return d.DownloadAllFiles(tasks)
 }
 
 // WriteManifest writes a manifest.json file summarising the download batch.
@@ -234,6 +324,46 @@ func (d *Downloader) WriteManifest(queryDesc string, result Result) error {
 	}
 
 	return nil
+}
+
+// verifyMD5 computes the MD5 of the file at path and compares against expected.
+// Returns (match, actualHex).
+func verifyMD5(path, expected string) (bool, string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, ""
+	}
+	defer f.Close()
+
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return false, ""
+	}
+	actual := hex.EncodeToString(h.Sum(nil))
+	return actual == expected, actual
+}
+
+// progressWriter wraps an io.Writer and calls a callback at regular intervals.
+type progressWriter struct {
+	w        io.Writer
+	filename string
+	written  int64
+	total    int64
+	callback func(string, int64, int64)
+	interval time.Duration
+	lastCall time.Time
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n, err := pw.w.Write(p)
+	pw.written += int64(n)
+
+	now := time.Now()
+	if now.Sub(pw.lastCall) >= pw.interval {
+		pw.lastCall = now
+		pw.callback(pw.filename, pw.written, pw.total)
+	}
+	return n, err
 }
 
 // downloadErr is an internal error type that carries fatality information.
