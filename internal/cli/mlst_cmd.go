@@ -63,10 +63,6 @@ func newMLSTCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			if limit <= 0 {
-				limit = 100
-			}
-
 			mlstCols := []string{
 				"sample_accession",
 				"sylph_species",
@@ -127,7 +123,7 @@ func newMLSTCmd() *cobra.Command {
 	cmd.Flags().StringVar(&scheme, "scheme", "", "filter by MLST scheme name")
 	cmd.Flags().StringVar(&mlstStatus, "status", "", "filter by MLST status (PERFECT, NOVEL, OK, MIXED, BAD, NONE, MISSING)")
 	cmd.Flags().BoolVar(&hqOnly, "hq-only", false, "only include high-quality genomes (hq_filter=PASS)")
-	cmd.Flags().IntVar(&limit, "limit", 100, "maximum number of results")
+	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of results (0 = unlimited)")
 	cmd.Flags().StringVar(&format, "format", "tsv", "output format: tsv, csv, json, table")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "write output to file instead of stdout")
 
