@@ -6,6 +6,8 @@ Single binary, no dependencies.
 
 **Supported platforms:** Linux, macOS, Windows (amd64 and arm64)
 
+`atb-cli` was designed and architected by [Thanh Le Viet](https://github.com/thanhleviet), with input and feedback from hackathon participants: Jane Hawkey, Ahmed M Moustafa, Martin Hunt, and Zamin Iqbal. The implementation was developed with coding assistance from [Claude](https://claude.ai) (Anthropic), an AI assistant that helped with code generation, testing, and documentation under human direction and review.
+
 ## Table of Contents
 
 - [Download](#download)
@@ -31,7 +33,6 @@ Single binary, no dependencies.
 - [Performance](#performance)
 - [Building](#building)
 - [Data Sources](#data-sources)
-- [Acknowledgments](#acknowledgments)
 - [License](#license)
 
 ## Download
@@ -676,10 +677,6 @@ All external URLs are defined in [`internal/sources/sources.go`](internal/source
 | **Sketch database** | Same OSF project, `atb_sketchlib.aggregated.202408` (.skm + .skd, ~4.2 GB) | `atb sketch fetch` |
 | **Genome assemblies** | `allthebacteria-assemblies.s3.eu-west-2.amazonaws.com` | `atb download`, `atb sketch query --download` |
 | **sketchlib binary** | [bacpop/sketchlib.rust](https://github.com/bacpop/sketchlib.rust/releases) (Linux/macOS) | `atb sketch install` |
-
-## Acknowledgments
-
-`atb-cli` was designed and architected by [Thanh Le Viet](https://github.com/thanhleviet), with input and feedback from hackathon participants: Jane Hawkey, Ahmed M Moustafa, Martin Hunt, and Zamin Iqbal. The implementation was developed with coding assistance from [Claude](https://claude.ai) (Anthropic), an AI assistant that helped with code generation, testing, and documentation under human direction and review.
 
 ## License
 
