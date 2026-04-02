@@ -659,6 +659,10 @@ All external URLs are defined in [`internal/sources/sources.go`](internal/source
 | **Genome assemblies** | `allthebacteria-assemblies.s3.eu-west-2.amazonaws.com` | `atb download`, `atb sketch query --download` |
 | **sketchlib binary** | [bacpop/sketchlib.rust](https://github.com/bacpop/sketchlib.rust/releases) (Linux/macOS) | `atb sketch install` |
 
+## Acknowledgments
+
+`atb-cli` was designed and architected by [Thanh Le Viet](https://github.com/thanhleviet), with input and feedback from hackathon participants: Jane Hawkey, Ahmed M Moustafa, Martin Hunt, and Zamin Iqbal. The implementation was developed with coding assistance from [Claude](https://claude.ai) (Anthropic), an AI assistant that helped with code generation, testing, and documentation under human direction and review.
+
 ## License
 
 [MIT](LICENSE)
