@@ -2,9 +2,43 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 )
+
+// runCmdCapturingOsStderr runs a command while also capturing writes to os.Stderr
+// (in addition to cobra's SetErr). This is necessary because downloadAssemblies
+// writes directly to os.Stderr rather than through cobra's error writer.
+func runCmdCapturingOsStderr(args ...string) (stdout, stderr string, err error) {
+	// Redirect os.Stderr to a pipe so we capture direct writes.
+	origStderr := os.Stderr
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		return "", "", pipeErr
+	}
+	os.Stderr = w
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd := NewRootCmd("test")
+	cmd.SetOut(&stdoutBuf)
+	cmd.SetErr(&stderrBuf)
+	cmd.SetArgs(args)
+	runErr := cmd.Execute()
+
+	// Restore and collect pipe output.
+	w.Close()
+	os.Stderr = origStderr
+	var pipeBuf bytes.Buffer
+	pipeBuf.ReadFrom(r)
+	r.Close()
+
+	combined := stderrBuf.String() + pipeBuf.String()
+	return stdoutBuf.String(), combined, runErr
+}
 
 const fixtureDir = "../../testdata/fixtures"
 
@@ -178,5 +212,97 @@ func TestMLSTHelp(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "--st") {
 		t.Errorf("expected '--st' flag in mlst --help output, got:\n%s", stdout)
+	}
+}
+
+// fixtureDirWithIndex creates a temp directory containing all fixture parquet files
+// and a freshly built SQLite index. This is required for commands that use the index
+// (e.g. mlst), which do not fall back to parquet scanning.
+func fixtureDirWithIndex(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	entries, err := os.ReadDir(fixtureDir)
+	if err != nil {
+		t.Fatalf("reading fixture dir: %v", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(fixtureDir, e.Name()))
+		if readErr != nil {
+			t.Fatalf("reading fixture %s: %v", e.Name(), readErr)
+		}
+		if writeErr := os.WriteFile(filepath.Join(dir, e.Name()), data, 0644); writeErr != nil {
+			t.Fatalf("writing fixture %s: %v", e.Name(), writeErr)
+		}
+	}
+
+	if err := idx.Build(dir, func(string, ...any) {}); err != nil {
+		t.Fatalf("building index: %v", err)
+	}
+	return dir
+}
+
+func TestAMRDownloadDryRun(t *testing.T) {
+	stdout, stderr, err := runCmdCapturingOsStderr("amr", "--data-dir", fixtureDir,
+		"--species", "Escherichia coli", "--limit", "5",
+		"--download", "--dry-run")
+	if err != nil {
+		t.Fatalf("amr --download --dry-run failed: %v\nstderr: %s", err, stderr)
+	}
+
+	// Normal query output should still appear on stdout
+	if !strings.Contains(stdout, "sample_accession") {
+		t.Errorf("expected tabular output on stdout, got:\n%s", stdout)
+	}
+
+	// Dry-run messages should appear on stderr
+	if !strings.Contains(stderr, "Would download") {
+		t.Errorf("expected dry-run message on stderr, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, ".fa.gz") {
+		t.Errorf("expected .fa.gz URLs in dry-run output, got:\n%s", stderr)
+	}
+}
+
+func TestMLSTDownloadDryRun(t *testing.T) {
+	dir := fixtureDirWithIndex(t)
+
+	stdout, stderr, err := runCmdCapturingOsStderr("mlst", "--data-dir", dir,
+		"--species", "Escherichia coli", "--limit", "5",
+		"--download", "--dry-run")
+	if err != nil {
+		t.Fatalf("mlst --download --dry-run failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stdout, "sample_accession") {
+		t.Errorf("expected tabular output on stdout, got:\n%s", stdout)
+	}
+
+	if !strings.Contains(stderr, "Would download") {
+		t.Errorf("expected dry-run message on stderr, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, ".fa.gz") {
+		t.Errorf("expected .fa.gz URLs in dry-run output, got:\n%s", stderr)
+	}
+}
+
+func TestAMRDownloadMaxSamples(t *testing.T) {
+	_, stderr, err := runCmdCapturingOsStderr("amr", "--data-dir", fixtureDir,
+		"--species", "Escherichia coli",
+		"--download", "--dry-run", "--max-samples", "2")
+	if err != nil {
+		t.Fatalf("amr --download --max-samples failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if !strings.Contains(stderr, "Capping to 2") {
+		// Only expect capping message if there are more than 2 unique samples
+		// Count .fa.gz lines to verify cap was applied
+		count := strings.Count(stderr, ".fa.gz")
+		if count > 2 {
+			t.Errorf("expected at most 2 URLs in dry-run output, got %d\nstderr: %s", count, stderr)
+		}
 	}
 }
