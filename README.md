@@ -31,6 +31,7 @@ Single binary, no dependencies.
 - [Performance](#performance)
 - [Building](#building)
 - [Data Sources](#data-sources)
+- [Acknowledgments](#acknowledgments)
 - [License](#license)
 
 ## Download
