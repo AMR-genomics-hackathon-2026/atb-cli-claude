@@ -29,6 +29,11 @@ func newAMRCmd() *cobra.Command {
 		limit       int
 		format      string
 		outputFile  string
+
+		downloadFlag bool
+		downloadDir  string
+		dryRun       bool
+		maxSamples   int
 	)
 
 	cmd := &cobra.Command{
@@ -166,7 +171,33 @@ Run 'atb fetch' to download the data before querying.`,
 				w = f
 			}
 
-			return output.Format(w, rows, cols, resolvedFormat)
+			if err := output.Format(w, rows, cols, resolvedFormat); err != nil {
+				return err
+			}
+
+			if downloadFlag && len(results) > 0 {
+				accessions := make([]string, len(results))
+				for i, r := range results {
+					accessions[i] = r.SampleAccession
+				}
+
+				outDir := downloadDir
+				if outDir == "" {
+					outDir = cfg.Download.OutputDir
+				}
+
+				return downloadAssemblies(AssemblyDownloadConfig{
+					SampleAccessions: accessions,
+					OutputDir:        outDir,
+					Parallel:         cfg.Download.Parallel,
+					DryRun:           dryRun,
+					MaxSamples:       maxSamples,
+					Force:            false,
+					MinFreeSpaceGB:   cfg.Download.MinFreeSpaceGB,
+				})
+			}
+
+			return nil
 		},
 	}
 
@@ -180,6 +211,10 @@ Run 'atb fetch' to download the data before querying.`,
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of results")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table, auto")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "write output to file instead of stdout")
+	cmd.Flags().BoolVar(&downloadFlag, "download", false, "download FASTA assemblies for matching samples")
+	cmd.Flags().StringVarP(&downloadDir, "download-dir", "d", "", "directory to save downloaded assemblies (default from config)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print download URLs without downloading")
+	cmd.Flags().IntVar(&maxSamples, "max-samples", 0, "limit number of assemblies to download")
 
 	return cmd
 }
