@@ -6,3 +6,5 @@ dist/
 testdata/fixtures/*.parquet
 .env
 .env.local
+.gitnexus
+docs/superpowers/
