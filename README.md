@@ -6,7 +6,7 @@ Single binary, no dependencies.
 
 **Supported platforms:** Linux, macOS, Windows (amd64 and arm64)
 
-`atb-cli` was designed and architected by [Thanh Le Viet](https://github.com/thanhleviet), with input and feedback from hackathon participants: Jane Hawkey, Ahmed M Moustafa, Martin Hunt, and Zamin Iqbal. The implementation was developed with coding assistance from [Claude](https://claude.ai) (Anthropic), an AI assistant that helped with code generation, testing, and documentation under human direction and review.
+`atb-cli` was designed and architected by [Thanh Le Viet](https://github.com/thanhleviet) in his personal capacity, using his own Claude account. The implementation was developed with coding assistance from [Claude](https://claude.ai) (Anthropic), an AI assistant that helped with code generation, testing, and documentation under human direction and review. Thanks to hackathon participants Jane Hawkey, Ahmed M Moustafa, Martin Hunt, and Zamin Iqbal for their input and feedback.
 
 ## Table of Contents
 
