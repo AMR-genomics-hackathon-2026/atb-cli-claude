@@ -64,7 +64,13 @@ Run 'atb fetch' to download the data before querying.`,
   atb amr --species "Escherichia coli" --type stress
 
   # Query all element types (AMR + stress + virulence)
-  atb amr --species "Klebsiella pneumoniae" --type all --hq-only`,
+  atb amr --species "Klebsiella pneumoniae" --type all --hq-only
+
+  # Download assemblies with beta-lactam resistance
+  atb amr --species "Escherichia coli" --class "BETA-LACTAM" --hq-only --download -d ./genomes
+
+  # Preview assemblies that would be downloaded
+  atb amr --species "Klebsiella pneumoniae" --gene "blaCTX-M-15" --download --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
 				return cmd.Help()

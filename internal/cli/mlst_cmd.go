@@ -41,7 +41,13 @@ func newMLSTCmd() *cobra.Command {
   atb mlst --scheme salmonella --limit 50
 
   # Only perfect MLST calls
-  atb mlst --species "Escherichia coli" --status PERFECT --limit 20`,
+  atb mlst --species "Escherichia coli" --status PERFECT --limit 20
+
+  # Download assemblies for ST131 E. coli
+  atb mlst --species "Escherichia coli" --st 131 --download -d ./st131
+
+  # Preview download, cap at 20 assemblies
+  atb mlst --species "Salmonella enterica" --status PERFECT --download --dry-run --max-samples 20`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
 				return cmd.Help()
