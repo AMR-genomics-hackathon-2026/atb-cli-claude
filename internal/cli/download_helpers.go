@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/download"
@@ -17,18 +18,24 @@ type AssemblyDownloadConfig struct {
 	MaxSamples       int
 	Force            bool
 	MinFreeSpaceGB   int
+	Stderr           io.Writer
 }
 
 // downloadAssemblies deduplicates accessions, constructs S3 URLs, and downloads
 // the corresponding FASTA assemblies. It prints progress and summary to stderr.
 func downloadAssemblies(cfg AssemblyDownloadConfig) error {
+	w := cfg.Stderr
+	if w == nil {
+		w = os.Stderr
+	}
+
 	accessions := deduplicateAccessions(cfg.SampleAccessions)
 	if len(accessions) == 0 {
 		return nil
 	}
 
 	if cfg.MaxSamples > 0 && len(accessions) > cfg.MaxSamples {
-		fmt.Fprintf(os.Stderr, "Capping to %d assemblies (--max-samples)\n", cfg.MaxSamples)
+		fmt.Fprintf(w, "Capping to %d assemblies (--max-samples)\n", cfg.MaxSamples)
 		accessions = accessions[:cfg.MaxSamples]
 	}
 
@@ -38,14 +45,14 @@ func downloadAssemblies(cfg AssemblyDownloadConfig) error {
 	}
 
 	if cfg.DryRun {
-		fmt.Fprintf(os.Stderr, "Would download %d assembly file(s) to %s\n", len(urls), cfg.OutputDir)
+		fmt.Fprintf(w, "Would download %d assembly file(s) to %s\n", len(urls), cfg.OutputDir)
 		for _, u := range urls {
-			fmt.Fprintf(os.Stderr, "  %s\n", u)
+			fmt.Fprintf(w, "  %s\n", u)
 		}
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "Downloading %d assembly file(s) to %s\n", len(urls), cfg.OutputDir)
+	fmt.Fprintf(w, "Downloading %d assembly file(s) to %s\n", len(urls), cfg.OutputDir)
 
 	dl := download.New(download.Config{
 		OutputDir:      cfg.OutputDir,
@@ -57,15 +64,15 @@ func downloadAssemblies(cfg AssemblyDownloadConfig) error {
 
 	result := dl.DownloadAll(urls)
 
-	fmt.Fprintf(os.Stderr, "Completed: %d/%d  Failed: %d  Bytes: %s\n",
+	fmt.Fprintf(w, "Completed: %d/%d  Failed: %d  Bytes: %s\n",
 		result.Completed, result.Total, result.Failed, formatSize(result.Bytes))
 
 	for _, e := range result.Errors {
-		fmt.Fprintf(os.Stderr, "  error: %s: %s\n", e.URL, e.Error)
+		fmt.Fprintf(w, "  error: %s: %s\n", e.URL, e.Error)
 	}
 
 	if err := dl.WriteManifest("atb assembly download", result); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to write manifest: %v\n", err)
+		fmt.Fprintf(w, "warning: failed to write manifest: %v\n", err)
 	}
 
 	if result.Failed > 0 {

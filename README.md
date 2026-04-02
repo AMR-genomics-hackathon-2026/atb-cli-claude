@@ -319,9 +319,20 @@ atb amr --species "Escherichia coli" --type all
 
 # Output to file
 atb amr --species "Klebsiella pneumoniae" --hq-only --format csv -o kpn_amr.csv
+
+# Download matching assemblies directly
+atb amr --species "Escherichia coli" --class "BETA-LACTAM" --hq-only --download -d ./genomes
+
+# Preview what would be downloaded (no actual download)
+atb amr --species "Klebsiella pneumoniae" --gene "blaCTX-M-15" --download --dry-run
+
+# Cap number of assemblies to download
+atb amr --species "Escherichia coli" --gene "bla%" --download --max-samples 20 -d ./bla_genomes
 ```
 
 `--species` accepts comma-separated values for multi-species comparison. When omitted, `--gene` or `--class` is required to search across all genera.
+
+The `--download` flag downloads the FASTA assembly for each unique sample in the results. Query output is always printed first. Use `--dry-run` to preview URLs without downloading, and `--max-samples` to cap the number of assemblies.
 
 AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`, `genus`
 
@@ -351,6 +362,12 @@ atb mlst --species "Klebsiella pneumoniae" --hq-only --status PERFECT --limit 50
 
 # Output as CSV
 atb mlst --species "Escherichia coli" --st 131 --format csv -o st131.csv
+
+# Download assemblies for matching samples
+atb mlst --species "Escherichia coli" --st 131 --download -d ./st131
+
+# Preview download, cap at 20 assemblies
+atb mlst --species "Salmonella enterica" --status PERFECT --download --dry-run --max-samples 20
 ```
 
 MLST output columns: `sample_accession`, `sylph_species`, `mlst_scheme`, `mlst_st`, `mlst_status`, `mlst_score`, `mlst_alleles`

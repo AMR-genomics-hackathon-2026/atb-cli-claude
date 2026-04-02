@@ -10,36 +10,6 @@ import (
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 )
 
-// runCmdCapturingOsStderr runs a command while also capturing writes to os.Stderr
-// (in addition to cobra's SetErr). This is necessary because downloadAssemblies
-// writes directly to os.Stderr rather than through cobra's error writer.
-func runCmdCapturingOsStderr(args ...string) (stdout, stderr string, err error) {
-	// Redirect os.Stderr to a pipe so we capture direct writes.
-	origStderr := os.Stderr
-	r, w, pipeErr := os.Pipe()
-	if pipeErr != nil {
-		return "", "", pipeErr
-	}
-	os.Stderr = w
-
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd := NewRootCmd("test")
-	cmd.SetOut(&stdoutBuf)
-	cmd.SetErr(&stderrBuf)
-	cmd.SetArgs(args)
-	runErr := cmd.Execute()
-
-	// Restore and collect pipe output.
-	w.Close()
-	os.Stderr = origStderr
-	var pipeBuf bytes.Buffer
-	pipeBuf.ReadFrom(r)
-	r.Close()
-
-	combined := stderrBuf.String() + pipeBuf.String()
-	return stdoutBuf.String(), combined, runErr
-}
-
 const fixtureDir = "../../testdata/fixtures"
 
 func runCmd(args ...string) (string, string, error) {
@@ -246,7 +216,7 @@ func fixtureDirWithIndex(t *testing.T) string {
 }
 
 func TestAMRDownloadDryRun(t *testing.T) {
-	stdout, stderr, err := runCmdCapturingOsStderr("amr", "--data-dir", fixtureDir,
+	stdout, stderr, err := runCmd("amr", "--data-dir", fixtureDir,
 		"--species", "Escherichia coli", "--limit", "5",
 		"--download", "--dry-run")
 	if err != nil {
@@ -270,7 +240,7 @@ func TestAMRDownloadDryRun(t *testing.T) {
 func TestMLSTDownloadDryRun(t *testing.T) {
 	dir := fixtureDirWithIndex(t)
 
-	stdout, stderr, err := runCmdCapturingOsStderr("mlst", "--data-dir", dir,
+	stdout, stderr, err := runCmd("mlst", "--data-dir", dir,
 		"--species", "Escherichia coli", "--limit", "5",
 		"--download", "--dry-run")
 	if err != nil {
@@ -290,7 +260,7 @@ func TestMLSTDownloadDryRun(t *testing.T) {
 }
 
 func TestAMRDownloadMaxSamples(t *testing.T) {
-	_, stderr, err := runCmdCapturingOsStderr("amr", "--data-dir", fixtureDir,
+	_, stderr, err := runCmd("amr", "--data-dir", fixtureDir,
 		"--species", "Escherichia coli",
 		"--download", "--dry-run", "--max-samples", "2")
 	if err != nil {

@@ -146,6 +146,7 @@ func newMLSTCmd() *cobra.Command {
 					MaxSamples:       maxSamples,
 					Force:            false,
 					MinFreeSpaceGB:   cfg.Download.MinFreeSpaceGB,
+					Stderr:           cmd.ErrOrStderr(),
 				})
 			}
 

@@ -200,6 +200,7 @@ Run 'atb fetch' to download the data before querying.`,
 					MaxSamples:       maxSamples,
 					Force:            false,
 					MinFreeSpaceGB:   cfg.Download.MinFreeSpaceGB,
+					Stderr:           cmd.ErrOrStderr(),
 				})
 			}
 
