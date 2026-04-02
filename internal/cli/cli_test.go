@@ -216,7 +216,9 @@ func fixtureDirWithIndex(t *testing.T) string {
 }
 
 func TestAMRDownloadDryRun(t *testing.T) {
-	stdout, stderr, err := runCmd("amr", "--data-dir", fixtureDir,
+	dir := fixtureDirWithIndex(t)
+
+	stdout, stderr, err := runCmd("amr", "--data-dir", dir,
 		"--species", "Escherichia coli", "--limit", "5",
 		"--download", "--dry-run")
 	if err != nil {
@@ -260,7 +262,9 @@ func TestMLSTDownloadDryRun(t *testing.T) {
 }
 
 func TestAMRDownloadMaxSamples(t *testing.T) {
-	_, stderr, err := runCmd("amr", "--data-dir", fixtureDir,
+	dir := fixtureDirWithIndex(t)
+
+	_, stderr, err := runCmd("amr", "--data-dir", dir,
 		"--species", "Escherichia coli",
 		"--download", "--dry-run", "--max-samples", "2")
 	if err != nil {
