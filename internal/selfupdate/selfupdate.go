@@ -104,7 +104,41 @@ func CompareVersions(current, remote string) bool {
 		return false // dev builds don't auto-update
 	}
 
-	return remote != current && remote > current
+	cur := parseSemver(current)
+	rem := parseSemver(remote)
+
+	if cur == nil || rem == nil {
+		return remote != current && remote > current
+	}
+
+	for i := 0; i < 3; i++ {
+		if rem[i] > cur[i] {
+			return true
+		}
+		if rem[i] < cur[i] {
+			return false
+		}
+	}
+	return false
+}
+
+func parseSemver(v string) []int {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) != 3 {
+		return nil
+	}
+	nums := make([]int, 3)
+	for i, p := range parts {
+		n := 0
+		for _, c := range p {
+			if c < '0' || c > '9' {
+				return nil
+			}
+			n = n*10 + int(c-'0')
+		}
+		nums[i] = n
+	}
+	return nums
 }
 
 func assetName() string {

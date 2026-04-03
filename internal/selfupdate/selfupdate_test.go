@@ -15,6 +15,10 @@ func TestCompareVersions(t *testing.T) {
 		{"dev", "v1.0.0", false},
 		{"", "v1.0.0", false},
 		{"v0.1.0", "v0.1.1", true},
+		{"v0.9.1", "v0.10.0", true},
+		{"v0.10.0", "v0.9.1", false},
+		{"v1.0.0", "v2.0.0", true},
+		{"v0.9.9", "v0.10.0", true},
 	}
 	for _, tt := range tests {
 		got := CompareVersions(tt.current, tt.remote)
