@@ -30,11 +30,27 @@ func (f ENAFilter) Active() bool {
 		f.CollectionDateTo != ""
 }
 
-// BuildENASampleSet streams ena_20250506.parquet and returns the set of
-// sample_accessions matching every provided filter. When no filter is
-// active it returns (nil, nil) so callers can skip the intersection step.
-func BuildENASampleSet(dir string, f ENAFilter) (map[string]struct{}, error) {
-	if !f.Active() {
+// ENARecord is the subset of ENA columns exposed in output rows. It is
+// deliberately narrow so that enrichment maps stay small even when the
+// ENA table has millions of entries.
+type ENARecord struct {
+	Country            string
+	CollectionDate     string
+	InstrumentPlatform string
+}
+
+// BuildENALookup streams ena_20250506.parquet and returns a map of
+// sample_accession -> ENARecord for every row matching the filter.
+//
+// When keep is non-nil, rows whose sample_accession is not in keep are
+// skipped, so callers that already have a result set only materialise
+// records they will use. First match wins when a sample has multiple
+// ENA rows.
+//
+// Returns (nil, nil) when the filter is inactive and keep is nil, so
+// callers can skip the scan entirely.
+func BuildENALookup(dir string, f ENAFilter, keep map[string]struct{}) (map[string]ENARecord, error) {
+	if !f.Active() && keep == nil {
 		return nil, nil
 	}
 
@@ -58,7 +74,13 @@ func BuildENASampleSet(dir string, f ENAFilter) (map[string]struct{}, error) {
 	}
 
 	enaPath := filepath.Join(dir, ENAFileName)
-	rows, err := pq.ReadStreamFiltered[pq.ENARow](enaPath, func(r pq.ENARow) bool {
+	out := make(map[string]ENARecord)
+	_, err := pq.ReadStreamFiltered[pq.ENARow](enaPath, func(r pq.ENARow) bool {
+		if keep != nil {
+			if _, ok := keep[r.SampleAccession]; !ok {
+				return false
+			}
+		}
 		if f.Country != "" && !strings.EqualFold(r.Country, f.Country) {
 			return false
 		}
@@ -77,15 +99,36 @@ func BuildENASampleSet(dir string, f ENAFilter) (map[string]struct{}, error) {
 				return false
 			}
 		}
-		return true
+		if _, exists := out[r.SampleAccession]; !exists {
+			out[r.SampleAccession] = ENARecord{
+				Country:            r.Country,
+				CollectionDate:     r.CollectionDate,
+				InstrumentPlatform: r.InstrumentPlatform,
+			}
+		}
+		// Returning false tells ReadStreamFiltered to skip collecting this row
+		// into its result slice — we already captured what we need in `out`.
+		return false
 	}, 0)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", ENAFileName, err)
 	}
+	return out, nil
+}
 
-	set := make(map[string]struct{}, len(rows))
-	for _, r := range rows {
-		set[r.SampleAccession] = struct{}{}
+// BuildENASampleSet is the set-only variant of BuildENALookup. Retained for
+// callers that only need the intersection key set.
+func BuildENASampleSet(dir string, f ENAFilter) (map[string]struct{}, error) {
+	if !f.Active() {
+		return nil, nil
+	}
+	lookup, err := BuildENALookup(dir, f, nil)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(lookup))
+	for k := range lookup {
+		set[k] = struct{}{}
 	}
 	return set, nil
 }

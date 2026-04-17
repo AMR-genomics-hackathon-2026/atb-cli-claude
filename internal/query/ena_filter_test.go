@@ -70,6 +70,55 @@ func TestBuildENASampleSetInvalidDate(t *testing.T) {
 	}
 }
 
+func TestBuildENALookupInactiveNoKeep(t *testing.T) {
+	lookup, err := BuildENALookup(fixturesDir, ENAFilter{}, nil)
+	if err != nil {
+		t.Fatalf("BuildENALookup returned error: %v", err)
+	}
+	if lookup != nil {
+		t.Errorf("expected nil map when filter inactive and keep nil, got %d entries", len(lookup))
+	}
+}
+
+func TestBuildENALookupByFilter(t *testing.T) {
+	lookup, err := BuildENALookup(fixturesDir, ENAFilter{Country: "UK"}, nil)
+	if err != nil {
+		t.Fatalf("BuildENALookup failed: %v", err)
+	}
+	if len(lookup) != 2 {
+		t.Fatalf("expected 2 UK samples, got %d", len(lookup))
+	}
+	for acc, rec := range lookup {
+		if rec.Country == "" {
+			t.Errorf("sample %s has empty Country", acc)
+		}
+	}
+}
+
+func TestBuildENALookupKeepRestrictsResult(t *testing.T) {
+	// Ask for every row but only keep one accession — the scan must still
+	// find it and drop the rest.
+	keep := map[string]struct{}{"SAMN00000001": {}}
+	lookup, err := BuildENALookup(fixturesDir, ENAFilter{}, keep)
+	if err != nil {
+		t.Fatalf("BuildENALookup failed: %v", err)
+	}
+	if len(lookup) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(lookup))
+	}
+	if _, ok := lookup["SAMN00000001"]; !ok {
+		t.Errorf("expected SAMN00000001 in lookup, got keys: %v", keysOf(lookup))
+	}
+}
+
+func keysOf[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 func TestENAFilterActive(t *testing.T) {
 	cases := []struct {
 		name string
