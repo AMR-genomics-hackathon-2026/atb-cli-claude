@@ -2,6 +2,14 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.12.1](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.1) - 2026-04-17
+
+### Fixed
+- `atb query`, `atb mlst`, and `atb amr` date filters now accept ISO 8601 interval `collection_date` values (e.g. `2020-01-01/2020-06-30`). Previously ~50k ENA rows using interval notation were silently excluded.
+
+### Changed
+- Help text for `--collection-date-from` / `--collection-date-to` clarifies that rows with missing or unparseable dates are excluded from date-filtered results.
+
 ## [v0.12.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.0) - 2026-04-17
 
 ### Added
