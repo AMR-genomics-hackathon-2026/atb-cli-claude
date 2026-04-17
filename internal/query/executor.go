@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
@@ -142,7 +143,27 @@ func Execute(dataDir string, filters Filters, columns []string) ([]ResultRow, er
 			}
 			sd.ena = &e
 		}
-		// Filter by ENA metadata
+		// Filter by ENA metadata. Parse the date bounds once so each row only
+		// pays the cost of parsing its own collection_date.
+		var (
+			fromTime, toTime time.Time
+			haveFrom, haveTo bool
+		)
+		if filters.CollectionDateFrom != "" {
+			if t, err := time.Parse("2006-01-02", filters.CollectionDateFrom); err == nil {
+				fromTime, haveFrom = t, true
+			} else {
+				return nil, fmt.Errorf("invalid --collection-date-from %q: expected YYYY-MM-DD", filters.CollectionDateFrom)
+			}
+		}
+		if filters.CollectionDateTo != "" {
+			if t, err := time.Parse("2006-01-02", filters.CollectionDateTo); err == nil {
+				toTime, haveTo = t, true
+			} else {
+				return nil, fmt.Errorf("invalid --collection-date-to %q: expected YYYY-MM-DD", filters.CollectionDateTo)
+			}
+		}
+
 		for accession, sd := range lookup {
 			if sd.ena == nil {
 				if filters.NeedsENA() {
@@ -158,12 +179,20 @@ func Execute(dataDir string, filters Filters, columns []string) ([]ResultRow, er
 				delete(lookup, accession)
 				continue
 			}
-			if filters.CollectionDateFrom != "" && sd.ena.CollectionDate < filters.CollectionDateFrom {
-				delete(lookup, accession)
-				continue
-			}
-			if filters.CollectionDateTo != "" && sd.ena.CollectionDate > filters.CollectionDateTo {
-				delete(lookup, accession)
+			if haveFrom || haveTo {
+				rowStart, rowEnd, ok := parseCollectionDate(sd.ena.CollectionDate)
+				if !ok {
+					delete(lookup, accession)
+					continue
+				}
+				if haveFrom && rowEnd.Before(fromTime) {
+					delete(lookup, accession)
+					continue
+				}
+				if haveTo && rowStart.After(toTime) {
+					delete(lookup, accession)
+					continue
+				}
 			}
 		}
 	}
@@ -216,6 +245,35 @@ func SortResults(rows []ResultRow, sortBy string, desc bool) {
 		}
 		return a < b
 	})
+}
+
+// parseCollectionDate interprets an ENA collection_date string as the inclusive
+// [start, end] range it represents. ENA dates are often partial: "2020" covers
+// the whole year, "2020-05" covers the whole month. Full timestamps are
+// truncated to their date component.
+func parseCollectionDate(s string) (start, end time.Time, ok bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, time.Time{}, false
+	}
+	if i := strings.IndexAny(s, "T "); i >= 0 {
+		s = s[:i]
+	}
+	switch len(s) {
+	case 4:
+		if t, err := time.Parse("2006", s); err == nil {
+			return t, t.AddDate(1, 0, -1), true
+		}
+	case 7:
+		if t, err := time.Parse("2006-01", s); err == nil {
+			return t, t.AddDate(0, 1, -1), true
+		}
+	case 10:
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			return t, t, true
+		}
+	}
+	return time.Time{}, time.Time{}, false
 }
 
 func buildRow(sd *sampleData) ResultRow {
