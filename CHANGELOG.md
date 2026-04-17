@@ -2,6 +2,15 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- `--with-ena` flag on `atb mlst` and `atb amr` appends `country`, `collection_date`, and `instrument_platform` columns from the ENA table
+- Any ENA filter (`--country`, `--platform`, `--collection-date-from`, `--collection-date-to`) now implies `--with-ena`, so the columns driving the filter are visible in the output
+
+### Changed
+- `atb mlst` and `atb amr` no longer scan `ena_20250506.parquet` unless `--with-ena` or an ENA filter is set — default queries stay in the millisecond tier even when the ENA table is installed
+
 ## [v0.9.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.9.0) - 2026-03-28
 
 ### Added

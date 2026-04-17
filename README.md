@@ -306,10 +306,17 @@ atb amr --gene "blaCTX-M-15" --limit 100
 
 # Filter by ENA metadata -- country, platform, or collection date
 # (requires ena_20250506.parquet: run 'atb fetch --tables ena_20250506.parquet')
+# Any ENA filter implies --with-ena, so country/collection_date/instrument_platform
+# are appended to the output automatically.
 atb amr --species "Escherichia coli" --class "BETA-LACTAM" \
   --country "United Kingdom" --platform ILLUMINA --limit 50
 atb amr --species "Salmonella enterica" --gene "blaCTX-M-15" \
   --collection-date-from 2022-01-01
+
+# Add ENA columns to the output without filtering
+# (requires ena_20250506.parquet). Without --with-ena the ENA table is not read,
+# so default AMR queries stay in the millisecond tier.
+atb amr --species "Escherichia coli" --class "BETA-LACTAM" --with-ena --limit 50
 
 # Search by drug class across all genera
 atb amr --class "CARBAPENEM" --limit 50
@@ -345,6 +352,8 @@ The `--download` flag downloads the FASTA assembly for each unique sample in the
 
 AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`, `genus`
 
+With `--with-ena` (or any ENA filter), three extra columns are appended: `country`, `collection_date`, `instrument_platform`.
+
 ### Query MLST (Multi-Locus Sequence Typing)
 
 MLST data covers 2.44M samples across 156 typing schemes. The data is included in the core metadata fetch.
@@ -371,9 +380,16 @@ atb mlst --species "Klebsiella pneumoniae" --hq-only --status PERFECT --limit 50
 
 # Filter MLST results by ENA metadata -- country, platform, or collection date
 # (requires ena_20250506.parquet: run 'atb fetch --tables ena_20250506.parquet')
+# Any ENA filter implies --with-ena, so country/collection_date/instrument_platform
+# are appended to the output automatically.
 atb mlst --species "Escherichia coli" --st 131 --country "United Kingdom"
 atb mlst --species "Salmonella enterica" --platform ILLUMINA \
   --collection-date-from 2022-01-01 --limit 100
+
+# Add ENA columns to the output without filtering
+# (requires ena_20250506.parquet). Without --with-ena the ENA table is not read,
+# so default MLST queries stay in the millisecond tier.
+atb mlst --species "Escherichia coli" --st 131 --with-ena
 
 # Output as CSV
 atb mlst --species "Escherichia coli" --st 131 --format csv -o st131.csv
@@ -386,6 +402,8 @@ atb mlst --species "Salmonella enterica" --status PERFECT --download --dry-run -
 ```
 
 MLST output columns: `sample_accession`, `sylph_species`, `mlst_scheme`, `mlst_st`, `mlst_status`, `mlst_score`, `mlst_alleles`
+
+With `--with-ena` (or any ENA filter), three extra columns are appended: `country`, `collection_date`, `instrument_platform`.
 
 MLST status values: `PERFECT` (exact match), `NOVEL` (new combination), `OK` (partial), `MIXED`, `BAD`, `MISSING`, `NONE`
 
