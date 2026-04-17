@@ -2,7 +2,7 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [v0.12.0](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.0) - 2026-04-17
 
 ### Added
 - `--with-ena` flag on `atb mlst` and `atb amr` appends `country`, `collection_date`, and `instrument_platform` columns from the ENA table
