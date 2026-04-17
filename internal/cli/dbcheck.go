@@ -93,6 +93,29 @@ func ensureDatabase(dir string) error {
 	}
 }
 
+// ensureParquetTables verifies that every named parquet table exists in dir.
+// It returns a user-friendly error listing missing files and pointing at
+// `atb fetch --all`. Names may be given with or without the ".parquet" suffix.
+func ensureParquetTables(dir string, tables []string) error {
+	var missing []string
+	for _, name := range tables {
+		file := name
+		if filepath.Ext(file) != ".parquet" {
+			file += ".parquet"
+		}
+		if _, err := os.Stat(filepath.Join(dir, file)); err != nil {
+			missing = append(missing, file)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"missing parquet table(s) in %s: %s\n\nThese filters require additional tables not downloaded by default.\nRun 'atb fetch --all' to download everything, or 'atb fetch --tables %s' for just these.",
+		dir, strings.Join(missing, ", "), strings.Join(missing, ","),
+	)
+}
+
 func doFetch(dir string, all bool) error {
 	fmt.Fprintf(os.Stderr, "\n  Downloading to %s ...\n\n", dir)
 

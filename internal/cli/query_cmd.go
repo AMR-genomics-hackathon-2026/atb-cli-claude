@@ -221,6 +221,10 @@ func newQueryCmd() *cobra.Command {
 				}
 			}
 
+			if err := ensureParquetTables(dir, query.Plan(filters, outCfg.Columns).Tables); err != nil {
+				return err
+			}
+
 			fmt.Fprintf(os.Stderr, "Querying parquet files (this may take a moment)...\n")
 			results, queryErr = query.Execute(dir, filters, outCfg.Columns)
 			if queryErr != nil {
