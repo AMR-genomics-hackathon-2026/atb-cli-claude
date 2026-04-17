@@ -28,6 +28,7 @@ func newMLSTCmd() *cobra.Command {
 		platform           string
 		collectionDateFrom string
 		collectionDateTo   string
+		withENA            bool
 
 		downloadFlag bool
 		downloadDir  string
@@ -56,9 +57,13 @@ func newMLSTCmd() *cobra.Command {
   # Preview download, cap at 20 assemblies
   atb mlst --species "Salmonella enterica" --status PERFECT --download --dry-run --max-samples 20
 
-  # Filter MLST results by ENA metadata (requires ena_20250506.parquet)
+  # Filter MLST results by ENA metadata (requires ena_20250506.parquet).
+  # Any ENA filter also appends country/collection_date/instrument_platform columns.
   atb mlst --species "Escherichia coli" --st 131 --country "UK"
-  atb mlst --species "Salmonella enterica" --platform ILLUMINA --collection-date-from 2022-01-01 --limit 100`,
+  atb mlst --species "Salmonella enterica" --platform ILLUMINA --collection-date-from 2022-01-01 --limit 100
+
+  # Append ENA columns without filtering (requires ena_20250506.parquet)
+  atb mlst --species "Escherichia coli" --st 131 --with-ena`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
 				return cmd.Help()
@@ -100,7 +105,8 @@ func newMLSTCmd() *cobra.Command {
 				CollectionDateFrom: collectionDateFrom,
 				CollectionDateTo:   collectionDateTo,
 			}
-			if enaFilter.Active() {
+			wantENA := enaFilter.Active() || withENA
+			if wantENA {
 				if err := ensureParquetTables(dir, []string{query.ENAFileName}); err != nil {
 					return err
 				}
@@ -128,15 +134,20 @@ func newMLSTCmd() *cobra.Command {
 				return fmt.Errorf("query failed: %w", err)
 			}
 
+			// Scan the ENA parquet only when the user asked for ENA data, either
+			// via a filter or --with-ena. A filter-driven scan also populates
+			// the enrichment map, so we never scan the 2.5 GB table twice.
+			var enaLookup map[string]query.ENARecord
 			if enaFilter.Active() {
 				fmt.Fprintf(os.Stderr, "Applying ENA metadata filter...\n")
-				enaSet, enaErr := query.BuildENASampleSet(dir, enaFilter)
+				lookup, enaErr := query.BuildENALookup(dir, enaFilter, nil)
 				if enaErr != nil {
 					return enaErr
 				}
+				enaLookup = lookup
 				filtered := rows[:0]
 				for _, r := range rows {
-					if _, ok := enaSet[r["sample_accession"]]; ok {
+					if _, ok := enaLookup[r["sample_accession"]]; ok {
 						filtered = append(filtered, r)
 					}
 				}
@@ -144,6 +155,17 @@ func newMLSTCmd() *cobra.Command {
 				if limit > 0 && len(rows) > limit {
 					rows = rows[:limit]
 				}
+			} else if withENA && len(rows) > 0 {
+				fmt.Fprintf(os.Stderr, "Enriching with ENA metadata...\n")
+				keep := make(map[string]struct{}, len(rows))
+				for _, r := range rows {
+					keep[r["sample_accession"]] = struct{}{}
+				}
+				lookup, enaErr := query.BuildENALookup(dir, query.ENAFilter{}, keep)
+				if enaErr != nil {
+					return enaErr
+				}
+				enaLookup = lookup
 			}
 
 			fmt.Fprintf(os.Stderr, "%s result(s)\n", humanize.Comma(int64(len(rows))))
@@ -152,9 +174,19 @@ func newMLSTCmd() *cobra.Command {
 				return nil
 			}
 
+			if wantENA {
+				mlstCols = append(mlstCols, "country", "collection_date", "instrument_platform")
+			}
+
 			outRows := make([]output.Row, len(rows))
 			for i, r := range rows {
 				outRows[i] = output.Row(r)
+				if wantENA {
+					rec := enaLookup[r["sample_accession"]]
+					outRows[i]["country"] = rec.Country
+					outRows[i]["collection_date"] = rec.CollectionDate
+					outRows[i]["instrument_platform"] = rec.InstrumentPlatform
+				}
 			}
 
 			var w io.Writer = cmd.OutOrStdout()
@@ -213,6 +245,7 @@ func newMLSTCmd() *cobra.Command {
 	cmd.Flags().StringVar(&platform, "platform", "", "filter by ENA instrument platform, e.g. ILLUMINA (requires ena_20250506.parquet)")
 	cmd.Flags().StringVar(&collectionDateFrom, "collection-date-from", "", "earliest ENA collection_date, YYYY-MM-DD (requires ena_20250506.parquet)")
 	cmd.Flags().StringVar(&collectionDateTo, "collection-date-to", "", "latest ENA collection_date, YYYY-MM-DD (requires ena_20250506.parquet)")
+	cmd.Flags().BoolVar(&withENA, "with-ena", false, "include country/collection_date/instrument_platform from the ENA table (requires ena_20250506.parquet)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of results (0 = unlimited)")
 	cmd.Flags().StringVar(&format, "format", "tsv", "output format: tsv, csv, json, table")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "write output to file instead of stdout")
