@@ -322,8 +322,8 @@ func newQueryCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&hasAssembly, "has-assembly", false, "only samples with assembly FASTA on OSF")
 	cmd.Flags().StringVar(&country, "country", "", "filter by country of origin (ENA metadata)")
 	cmd.Flags().StringVar(&platform, "platform", "", "filter by sequencing platform (ENA metadata)")
-	cmd.Flags().StringVar(&collectionDateFrom, "collection-date-from", "", "collection date lower bound (YYYY-MM-DD)")
-	cmd.Flags().StringVar(&collectionDateTo, "collection-date-to", "", "collection date upper bound (YYYY-MM-DD)")
+	cmd.Flags().StringVar(&collectionDateFrom, "collection-date-from", "", "collection date lower bound (YYYY-MM-DD); rows with missing or unparseable dates are excluded")
+	cmd.Flags().StringVar(&collectionDateTo, "collection-date-to", "", "collection date upper bound (YYYY-MM-DD); rows with missing or unparseable dates are excluded")
 
 	// Output flags
 	cmd.Flags().StringSliceVar(&columns, "columns", nil, "columns to include in output")
