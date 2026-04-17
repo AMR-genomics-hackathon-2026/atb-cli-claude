@@ -250,8 +250,25 @@ func SortResults(rows []ResultRow, sortBy string, desc bool) {
 // parseCollectionDate interprets an ENA collection_date string as the inclusive
 // [start, end] range it represents. ENA dates are often partial: "2020" covers
 // the whole year, "2020-05" covers the whole month. Full timestamps are
-// truncated to their date component.
+// truncated to their date component. ISO 8601 interval notation (start/end) is
+// also supported.
 func parseCollectionDate(s string) (start, end time.Time, ok bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, time.Time{}, false
+	}
+	if parts := strings.SplitN(s, "/", 3); len(parts) == 2 {
+		ls, _, lok := parseSingleDate(parts[0])
+		_, re, rok := parseSingleDate(parts[1])
+		if !lok || !rok {
+			return time.Time{}, time.Time{}, false
+		}
+		return ls, re, true
+	}
+	return parseSingleDate(s)
+}
+
+func parseSingleDate(s string) (start, end time.Time, ok bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}, time.Time{}, false

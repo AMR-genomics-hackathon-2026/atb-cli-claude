@@ -212,6 +212,15 @@ func TestParseCollectionDate(t *testing.T) {
 		{"", false, time.Time{}, time.Time{}},
 		{"July 2020", false, time.Time{}, time.Time{}},
 		{"2020-13-01", false, time.Time{}, time.Time{}},
+		// ISO 8601 intervals
+		{"2020-01-01/2020-06-30", true, d("2020-01-01"), d("2020-06-30")},
+		{"2019/2020", true, d("2019-01-01"), d("2020-12-31")},
+		{"2020-05/2020-08", true, d("2020-05-01"), d("2020-08-31")},
+		{"2020-01-01/", false, time.Time{}, time.Time{}},
+		{"/2020", false, time.Time{}, time.Time{}},
+		{"2020/2019/2018", false, time.Time{}, time.Time{}},
+		{"2020-13/2020", false, time.Time{}, time.Time{}},
+		{"2020-01-01T00:00:00Z/2020-06-30T00:00:00Z", true, d("2020-01-01"), d("2020-06-30")},
 	}
 	for _, tc := range cases {
 		start, end, ok := parseCollectionDate(tc.in)
