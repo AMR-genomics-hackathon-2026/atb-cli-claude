@@ -35,6 +35,7 @@ func newAMRCmd() *cobra.Command {
 		platform           string
 		collectionDateFrom string
 		collectionDateTo   string
+		withENA            bool
 
 		downloadFlag bool
 		downloadDir  string
@@ -78,9 +79,13 @@ Run 'atb fetch' to download the data before querying.`,
   # Preview assemblies that would be downloaded
   atb amr --species "Klebsiella pneumoniae" --gene "blaCTX-M-15" --download --dry-run
 
-  # Filter by ENA metadata (requires ena_20250506.parquet)
+  # Filter by ENA metadata (requires ena_20250506.parquet).
+  # Any ENA filter also appends country/collection_date/instrument_platform columns.
   atb amr --species "Escherichia coli" --class "BETA-LACTAM" --country "UK" --platform ILLUMINA
-  atb amr --species "Salmonella enterica" --gene "blaCTX-M-15" --collection-date-from 2022-01-01`,
+  atb amr --species "Salmonella enterica" --gene "blaCTX-M-15" --collection-date-from 2022-01-01
+
+  # Append ENA columns without filtering (requires ena_20250506.parquet)
+  atb amr --species "Escherichia coli" --class "BETA-LACTAM" --with-ena`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
 				return cmd.Help()
@@ -129,7 +134,8 @@ Run 'atb fetch' to download the data before querying.`,
 				CollectionDateFrom: collectionDateFrom,
 				CollectionDateTo:   collectionDateTo,
 			}
-			if enaFilter.Active() {
+			wantENA := enaFilter.Active() || withENA
+			if wantENA {
 				if err := ensureParquetTables(dir, []string{query.ENAFileName}); err != nil {
 					return err
 				}
@@ -161,11 +167,17 @@ Run 'atb fetch' to download the data before querying.`,
 				}
 			}
 
+			var enaLookup map[string]query.ENARecord
 			if enaFilter.Active() {
 				fmt.Fprintf(os.Stderr, "Applying ENA metadata filter...\n")
-				enaSet, enaErr := query.BuildENASampleSet(dir, enaFilter)
+				lookup, enaErr := query.BuildENALookup(dir, enaFilter, nil)
 				if enaErr != nil {
 					return enaErr
+				}
+				enaLookup = lookup
+				enaSet := make(map[string]struct{}, len(lookup))
+				for s := range lookup {
+					enaSet[s] = struct{}{}
 				}
 				if sampleSet == nil {
 					sampleSet = enaSet
@@ -194,10 +206,27 @@ Run 'atb fetch' to download the data before querying.`,
 			if err != nil {
 				return fmt.Errorf("AMR query failed: %w", err)
 			}
+
+			// With --with-ena (and no filter) we scan the ENA table keyed to the
+			// distinct sample set in the results, so enrichment cost scales with
+			// the result size rather than the full 2.5 GB table.
+			if withENA && enaLookup == nil && len(results) > 0 {
+				fmt.Fprintf(os.Stderr, "Enriching with ENA metadata...\n")
+				keep := make(map[string]struct{}, len(results))
+				for _, r := range results {
+					keep[r.SampleAccession] = struct{}{}
+				}
+				lookup, enaErr := query.BuildENALookup(dir, query.ENAFilter{}, keep)
+				if enaErr != nil {
+					return enaErr
+				}
+				enaLookup = lookup
+			}
+
 			fmt.Fprintf(os.Stderr, "%s result(s)\n", humanize.Comma(int64(len(results))))
 
-			rows := amrResultsToOutputRows(results)
-			cols := amrColumns()
+			rows := amrResultsToOutputRows(results, enaLookup, wantENA)
+			cols := amrColumns(wantENA)
 
 			// Resolve output format
 			resolvedFormat := format
@@ -258,6 +287,7 @@ Run 'atb fetch' to download the data before querying.`,
 	cmd.Flags().StringVar(&platform, "platform", "", "filter by ENA instrument platform, e.g. ILLUMINA (requires ena_20250506.parquet)")
 	cmd.Flags().StringVar(&collectionDateFrom, "collection-date-from", "", "earliest ENA collection_date, YYYY-MM-DD (requires ena_20250506.parquet)")
 	cmd.Flags().StringVar(&collectionDateTo, "collection-date-to", "", "latest ENA collection_date, YYYY-MM-DD (requires ena_20250506.parquet)")
+	cmd.Flags().BoolVar(&withENA, "with-ena", false, "include country/collection_date/instrument_platform from the ENA table (requires ena_20250506.parquet)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of results")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table, auto")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "write output to file instead of stdout")
@@ -269,9 +299,10 @@ Run 'atb fetch' to download the data before querying.`,
 	return cmd
 }
 
-// amrColumns returns the fixed column order for AMR output.
-func amrColumns() []string {
-	return []string{
+// amrColumns returns the fixed column order for AMR output. When withENA is
+// true, country/collection_date/instrument_platform are appended.
+func amrColumns(withENA bool) []string {
+	cols := []string{
 		"sample_accession",
 		"gene_symbol",
 		"element_type",
@@ -284,12 +315,16 @@ func amrColumns() []string {
 		"species",
 		"genus",
 	}
+	if withENA {
+		cols = append(cols, "country", "collection_date", "instrument_platform")
+	}
+	return cols
 }
 
-func amrResultsToOutputRows(results []amr.Result) []output.Row {
+func amrResultsToOutputRows(results []amr.Result, enaLookup map[string]query.ENARecord, withENA bool) []output.Row {
 	rows := make([]output.Row, len(results))
 	for i, r := range results {
-		rows[i] = output.Row{
+		row := output.Row{
 			"sample_accession": r.SampleAccession,
 			"gene_symbol":      r.GeneSymbol,
 			"element_type":     r.ElementType,
@@ -302,6 +337,13 @@ func amrResultsToOutputRows(results []amr.Result) []output.Row {
 			"species":          r.Species,
 			"genus":            r.Genus,
 		}
+		if withENA {
+			rec := enaLookup[r.SampleAccession]
+			row["country"] = rec.Country
+			row["collection_date"] = rec.CollectionDate
+			row["instrument_platform"] = rec.InstrumentPlatform
+		}
+		rows[i] = row
 	}
 	return rows
 }
