@@ -15,6 +15,7 @@ import (
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
 	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
 )
 
 func newAMRCmd() *cobra.Command {
@@ -29,6 +30,11 @@ func newAMRCmd() *cobra.Command {
 		limit       int
 		format      string
 		outputFile  string
+
+		country            string
+		platform           string
+		collectionDateFrom string
+		collectionDateTo   string
 
 		downloadFlag bool
 		downloadDir  string
@@ -70,7 +76,11 @@ Run 'atb fetch' to download the data before querying.`,
   atb amr --species "Escherichia coli" --class "BETA-LACTAM" --hq-only --download -d ./genomes
 
   # Preview assemblies that would be downloaded
-  atb amr --species "Klebsiella pneumoniae" --gene "blaCTX-M-15" --download --dry-run`,
+  atb amr --species "Klebsiella pneumoniae" --gene "blaCTX-M-15" --download --dry-run
+
+  # Filter by ENA metadata (requires ena_20250506.parquet)
+  atb amr --species "Escherichia coli" --class "BETA-LACTAM" --country "UK" --platform ILLUMINA
+  atb amr --species "Salmonella enterica" --gene "blaCTX-M-15" --collection-date-from 2022-01-01`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
 				return cmd.Help()
@@ -113,6 +123,18 @@ Run 'atb fetch' to download the data before querying.`,
 				return fmt.Errorf("AMR data not found — run 'atb fetch' to download %s", amr.AMRFileName)
 			}
 
+			enaFilter := query.ENAFilter{
+				Country:            country,
+				Platform:           platform,
+				CollectionDateFrom: collectionDateFrom,
+				CollectionDateTo:   collectionDateTo,
+			}
+			if enaFilter.Active() {
+				if err := ensureParquetTables(dir, []string{query.ENAFileName}); err != nil {
+					return err
+				}
+			}
+
 			var sampleSet map[string]struct{}
 			if hqOnly {
 				fmt.Fprintf(os.Stderr, "Loading HQ sample set...\n")
@@ -136,6 +158,23 @@ Run 'atb fetch' to download the data before querying.`,
 				sampleSet = make(map[string]struct{}, len(hqRows))
 				for _, r := range hqRows {
 					sampleSet[r.SampleAccession] = struct{}{}
+				}
+			}
+
+			if enaFilter.Active() {
+				fmt.Fprintf(os.Stderr, "Applying ENA metadata filter...\n")
+				enaSet, enaErr := query.BuildENASampleSet(dir, enaFilter)
+				if enaErr != nil {
+					return enaErr
+				}
+				if sampleSet == nil {
+					sampleSet = enaSet
+				} else {
+					for s := range sampleSet {
+						if _, ok := enaSet[s]; !ok {
+							delete(sampleSet, s)
+						}
+					}
 				}
 			}
 
@@ -215,6 +254,10 @@ Run 'atb fetch' to download the data before querying.`,
 	cmd.Flags().BoolVar(&hqOnly, "hq-only", false, "only include HQ samples (hq_filter=PASS)")
 	cmd.Flags().Float64Var(&minCoverage, "min-coverage", 0, "minimum coverage %")
 	cmd.Flags().Float64Var(&minIdentity, "min-identity", 0, "minimum identity %")
+	cmd.Flags().StringVar(&country, "country", "", "filter by ENA country (requires ena_20250506.parquet)")
+	cmd.Flags().StringVar(&platform, "platform", "", "filter by ENA instrument platform, e.g. ILLUMINA (requires ena_20250506.parquet)")
+	cmd.Flags().StringVar(&collectionDateFrom, "collection-date-from", "", "earliest ENA collection_date, YYYY-MM-DD (requires ena_20250506.parquet)")
+	cmd.Flags().StringVar(&collectionDateTo, "collection-date-to", "", "latest ENA collection_date, YYYY-MM-DD (requires ena_20250506.parquet)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of results")
 	cmd.Flags().StringVar(&format, "format", "", "output format: tsv, csv, json, table, auto")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "write output to file instead of stdout")

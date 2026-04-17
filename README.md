@@ -304,6 +304,13 @@ atb amr --species "Escherichia coli,Klebsiella pneumoniae" --class "BETA-LACTAM"
 # Find a gene across ALL genera (no species filter needed)
 atb amr --gene "blaCTX-M-15" --limit 100
 
+# Filter by ENA metadata -- country, platform, or collection date
+# (requires ena_20250506.parquet: run 'atb fetch --tables ena_20250506.parquet')
+atb amr --species "Escherichia coli" --class "BETA-LACTAM" \
+  --country "United Kingdom" --platform ILLUMINA --limit 50
+atb amr --species "Salmonella enterica" --gene "blaCTX-M-15" \
+  --collection-date-from 2022-01-01
+
 # Search by drug class across all genera
 atb amr --class "CARBAPENEM" --limit 50
 
@@ -361,6 +368,12 @@ atb mlst --species "Salmonella enterica" --status NOVEL --limit 20
 
 # Combine with species and quality filters
 atb mlst --species "Klebsiella pneumoniae" --hq-only --status PERFECT --limit 50
+
+# Filter MLST results by ENA metadata -- country, platform, or collection date
+# (requires ena_20250506.parquet: run 'atb fetch --tables ena_20250506.parquet')
+atb mlst --species "Escherichia coli" --st 131 --country "United Kingdom"
+atb mlst --species "Salmonella enterica" --platform ILLUMINA \
+  --collection-date-from 2022-01-01 --limit 100
 
 # Output as CSV
 atb mlst --species "Escherichia coli" --st 131 --format csv -o st131.csv
@@ -471,6 +484,9 @@ atb fetch --tables ena_20250506.parquet
 
 # Force re-download
 atb fetch --force
+
+# Rebuild the SQLite query index (runs automatically after fetch)
+atb index --force
 ```
 
 ### Configuration
@@ -505,6 +521,7 @@ Config is stored at `~/.config/atb/config.toml`.
 |------|-------------|
 | `atb_query` | Search genomes by species, genus, quality, N50 |
 | `atb_amr` | Query AMR resistance genes by species and drug class |
+| `atb_mlst` | Query MLST scheme, ST, and allele calls |
 | `atb_info` | Get full metadata for a specific sample |
 | `atb_stats` | Database summary statistics |
 | `atb_species_list` | List available species with genome counts |

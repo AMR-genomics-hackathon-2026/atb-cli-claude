@@ -3,6 +3,7 @@ package query
 import (
 	"strconv"
 	"testing"
+	"time"
 )
 
 const fixturesDir = "../../testdata/fixtures"
@@ -150,6 +151,78 @@ func TestSortResultsString(t *testing.T) {
 		if rows[i-1]["sylph_species"] > rows[i]["sylph_species"] {
 			t.Errorf("expected ascending string sort at index %d: %q > %q",
 				i, rows[i-1]["sylph_species"], rows[i]["sylph_species"])
+		}
+	}
+}
+
+func TestExecuteCollectionDateRange(t *testing.T) {
+	filters := Filters{
+		CollectionDateFrom: "2020-01-01",
+		CollectionDateTo:   "2023-12-31",
+	}
+	rows, err := Execute(fixturesDir, filters, nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	// Fixture SAMN00000001-04 are 2019 (excluded); SAMN00000005-20 are 2020-2023.
+	if len(rows) != 16 {
+		t.Errorf("expected 16 rows in 2020-2023 range, got %d", len(rows))
+	}
+	for _, r := range rows {
+		if got := r["collection_date"]; got < "2020-01-01" || got > "2023-12-31" {
+			t.Errorf("row outside range: collection_date=%q", got)
+		}
+	}
+}
+
+func TestExecuteCollectionDateFromOnly(t *testing.T) {
+	filters := Filters{CollectionDateFrom: "2023-01-01"}
+	rows, err := Execute(fixturesDir, filters, nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	// SAMN00000017-20 are 2023; everything before is excluded.
+	if len(rows) != 4 {
+		t.Errorf("expected 4 rows from 2023-01-01, got %d", len(rows))
+	}
+}
+
+func TestExecuteInvalidCollectionDate(t *testing.T) {
+	filters := Filters{CollectionDateFrom: "2020/01/01"}
+	if _, err := Execute(fixturesDir, filters, nil); err == nil {
+		t.Fatal("expected error for malformed --collection-date-from")
+	}
+}
+
+func TestParseCollectionDate(t *testing.T) {
+	d := func(s string) time.Time {
+		t, _ := time.Parse("2006-01-02", s)
+		return t
+	}
+	cases := []struct {
+		in         string
+		wantOK     bool
+		wantStart  time.Time
+		wantEnd    time.Time
+	}{
+		{"2020-05-15", true, d("2020-05-15"), d("2020-05-15")},
+		{"2020-05", true, d("2020-05-01"), d("2020-05-31")},
+		{"2020", true, d("2020-01-01"), d("2020-12-31")},
+		{"2020-01-15T13:45:00Z", true, d("2020-01-15"), d("2020-01-15")},
+		{"", false, time.Time{}, time.Time{}},
+		{"July 2020", false, time.Time{}, time.Time{}},
+		{"2020-13-01", false, time.Time{}, time.Time{}},
+	}
+	for _, tc := range cases {
+		start, end, ok := parseCollectionDate(tc.in)
+		if ok != tc.wantOK {
+			t.Errorf("parseCollectionDate(%q) ok=%v, want %v", tc.in, ok, tc.wantOK)
+			continue
+		}
+		if ok && (!start.Equal(tc.wantStart) || !end.Equal(tc.wantEnd)) {
+			t.Errorf("parseCollectionDate(%q) = [%s, %s], want [%s, %s]",
+				tc.in, start.Format("2006-01-02"), end.Format("2006-01-02"),
+				tc.wantStart.Format("2006-01-02"), tc.wantEnd.Format("2006-01-02"))
 		}
 	}
 }
