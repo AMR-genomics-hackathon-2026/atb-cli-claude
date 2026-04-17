@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -11,6 +12,38 @@ import (
 	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
 	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
 )
+
+// printENAInfo prints the ENA metadata section for a sample when the ENA
+// parquet is present. It is a no-op when the table hasn't been downloaded so
+// the rest of `atb info` still renders cleanly.
+func printENAInfo(w io.Writer, dir, sampleAccession string) {
+	enaPath := filepath.Join(dir, "ena_20250506.parquet")
+	if _, err := os.Stat(enaPath); err != nil {
+		return
+	}
+	rows, err := pq.ReadFiltered[pq.ENARow](enaPath, func(r pq.ENARow) bool {
+		return r.SampleAccession == sampleAccession
+	})
+	if err != nil {
+		fmt.Fprintf(w, "ena: error reading: %v\n\n", err)
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+	e := rows[0]
+	fmt.Fprintln(w, "=== ENA Metadata ===")
+	fmt.Fprintf(w, "  country:             %s\n", e.Country)
+	fmt.Fprintf(w, "  collection_date:     %s\n", e.CollectionDate)
+	fmt.Fprintf(w, "  instrument_platform: %s\n", e.InstrumentPlatform)
+	fmt.Fprintf(w, "  instrument_model:    %s\n", e.InstrumentModel)
+	fmt.Fprintf(w, "  read_count:          %s\n", humanize.Comma(e.ReadCount))
+	fmt.Fprintf(w, "  base_count:          %s\n", humanize.Comma(e.BaseCount))
+	fmt.Fprintf(w, "  library_strategy:    %s\n", e.LibraryStrategy)
+	fmt.Fprintf(w, "  study_accession:     %s\n", e.StudyAccession)
+	fmt.Fprintf(w, "  fastq_ftp:           %s\n", e.FastqFTP)
+	fmt.Fprintln(w)
+}
 
 func newInfoCmd() *cobra.Command {
 	return &cobra.Command{
@@ -88,6 +121,11 @@ func newInfoCmd() *cobra.Command {
 							}
 							fmt.Fprintln(w)
 						}
+
+						// The SQLite index doesn't carry ENA fields; join from
+						// the parquet file when it's available. Use the resolved
+						// sample_accession so run-accession lookups still match.
+						printENAInfo(w, dir, row["sample_accession"])
 						return nil
 					}
 				}
@@ -163,30 +201,11 @@ func newInfoCmd() *cobra.Command {
 				}
 			}
 
-			// ENA metadata (optional)
-			enaPath := filepath.Join(dir, "ena_20250506.parquet")
-			if _, err := os.Stat(enaPath); err == nil {
-				rows, err := pq.ReadFiltered[pq.ENARow](enaPath, func(r pq.ENARow) bool {
-					return r.SampleAccession == accession
-				})
-				if err != nil {
-					fmt.Fprintf(w, "ena: error reading: %v\n", err)
-				} else if len(rows) > 0 {
-					e := rows[0]
-					fmt.Fprintln(w, "=== ENA Metadata ===")
-					fmt.Fprintf(w, "  country:             %s\n", e.Country)
-					fmt.Fprintf(w, "  collection_date:     %s\n", e.CollectionDate)
-					fmt.Fprintf(w, "  instrument_platform: %s\n", e.InstrumentPlatform)
-					fmt.Fprintf(w, "  instrument_model:    %s\n", e.InstrumentModel)
-					fmt.Fprintf(w, "  read_count:          %s\n", humanize.Comma(e.ReadCount))
-					fmt.Fprintf(w, "  base_count:          %s\n", humanize.Comma(e.BaseCount))
-					fmt.Fprintf(w, "  library_strategy:    %s\n", e.LibraryStrategy)
-					fmt.Fprintf(w, "  study_accession:     %s\n", e.StudyAccession)
-					fmt.Fprintf(w, "  fastq_ftp:           %s\n", e.FastqFTP)
-					fmt.Fprintln(w)
-				}
-			} else {
-				fmt.Fprintln(w, "ENA table not downloaded. Run 'atb fetch --all' to get all tables.")
+			// ENA metadata (optional). Helper is a no-op when the ENA
+			// parquet hasn't been downloaded.
+			printENAInfo(w, dir, accession)
+			if _, err := os.Stat(filepath.Join(dir, "ena_20250506.parquet")); err != nil {
+				fmt.Fprintln(w, "ENA table not downloaded. Run 'atb fetch --tables ena_20250506.parquet' to enable.")
 			}
 
 			// MLST (optional)
