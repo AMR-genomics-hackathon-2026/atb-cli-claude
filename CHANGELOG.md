@@ -2,7 +2,7 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [v0.12.2](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.2) - 2026-04-20
 
 ### Fixed
 - `atb mlst` now excludes samples that have no MLST scheme assigned (`mlst_scheme` empty or `-`) by default. Previously, default queries returned rows with blank ST and alleles columns. Use `--status NONE` to inspect untyped samples explicitly.
