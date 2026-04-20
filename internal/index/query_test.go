@@ -192,6 +192,40 @@ func TestQueryMLSTFilterByStatus(t *testing.T) {
 	}
 }
 
+func TestQueryMLSTOnlyExcludesUntyped(t *testing.T) {
+	db := buildTestIndex(t)
+
+	// Without MLSTOnly: SAMN16, SAMN17, SAMN20 have mlst_scheme='-' and show up.
+	all, err := db.Query(QueryParams{})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	var dashed int
+	for _, r := range all {
+		if r["mlst_scheme"] == "-" || r["mlst_scheme"] == "" {
+			dashed++
+		}
+	}
+	if dashed == 0 {
+		t.Fatal("fixture precondition failed: expected rows with mlst_scheme in {'', '-'}")
+	}
+
+	// With MLSTOnly those rows must be filtered out.
+	rows, err := db.Query(QueryParams{MLSTOnly: true})
+	if err != nil {
+		t.Fatalf("Query with MLSTOnly: %v", err)
+	}
+	if len(rows) != len(all)-dashed {
+		t.Errorf("expected %d rows with MLSTOnly, got %d", len(all)-dashed, len(rows))
+	}
+	for _, r := range rows {
+		if r["mlst_scheme"] == "" || r["mlst_scheme"] == "-" {
+			t.Errorf("sample %s leaked through MLSTOnly filter: mlst_scheme=%q",
+				r["sample_accession"], r["mlst_scheme"])
+		}
+	}
+}
+
 func TestMLSTForSample(t *testing.T) {
 	db := buildTestIndex(t)
 

@@ -376,7 +376,8 @@ func makeMLSTHandler(dataDir string) mcp.ToolHandlerFor[mlstInput, any] {
 				"mlst_score",
 				"mlst_alleles",
 			},
-			Limit: limit,
+			Limit:    limit,
+			MLSTOnly: in.MLSTStatus == "",
 		})
 		if err != nil {
 			return errorResult(fmt.Sprintf("MLST query failed: %v", err))

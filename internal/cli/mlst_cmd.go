@@ -129,6 +129,7 @@ func newMLSTCmd() *cobra.Command {
 				MLSTStatus:   mlstStatus,
 				Columns:      mlstCols,
 				Limit:        queryLimit,
+				MLSTOnly:     mlstStatus == "",
 			})
 			if err != nil {
 				return fmt.Errorf("query failed: %w", err)

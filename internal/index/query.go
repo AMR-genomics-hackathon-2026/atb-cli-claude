@@ -65,6 +65,7 @@ type QueryParams struct {
 	SequenceType     string // filter by mlst_st
 	Scheme           string // filter by mlst_scheme
 	MLSTStatus       string // filter by mlst_status
+	MLSTOnly         bool   // exclude samples with no MLST scheme (empty or "-")
 }
 
 // userColToSQL maps user-facing column names to SQLite column names.
@@ -215,6 +216,9 @@ func (d *DB) Query(params QueryParams) ([]map[string]string, error) {
 	if params.MLSTStatus != "" {
 		conditions = append(conditions, "upper(mlst_status) = upper(?)")
 		args = append(args, params.MLSTStatus)
+	}
+	if params.MLSTOnly {
+		conditions = append(conditions, "mlst_scheme != '' AND mlst_scheme != '-'")
 	}
 
 	// Determine which SQL columns to SELECT.
