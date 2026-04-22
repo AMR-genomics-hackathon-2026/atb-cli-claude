@@ -2,6 +2,17 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.12.3](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.3) - 2026-04-22
+
+### Changed
+
+- **Project has moved to [allthebacteria/atb-cli](https://github.com/allthebacteria/atb-cli).** This release redirects the built-in self-update mechanism (`atb update`) and the `curl | bash` installer to the new repository. Running `atb update` from this version onward will discover future releases published on the new repo — no action required, users will upgrade automatically.
+- New installations should use the new URL:
+  ```
+  curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
+  ```
+- Historical releases (v0.1.0–v0.12.2) remain downloadable from this archived repository.
+
 ## [v0.12.2](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.2) - 2026-04-20
 
 ### Fixed

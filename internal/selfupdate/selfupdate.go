@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	repo           = "AMR-genomics-hackathon-2026/atb-cli-claude"
+	repo           = "allthebacteria/atb-cli"
 	checkInterval  = 24 * time.Hour
 	stateFileName  = "update-state.json"
 )
