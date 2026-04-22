@@ -2,6 +2,12 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.12.4](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.4) - 2026-04-22
+
+### Fixed
+
+- `install.sh` now fetches the latest release from this repository during the migration gap. In v0.12.3 the installer was pointed at the new repository before it had any releases, causing `curl | bash` fresh installs to fail with a 404. Installed binaries continue to self-update to the new repository on `atb update`; only the `curl | bash` path was affected.
+
 ## [v0.12.3](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.3) - 2026-04-22
 
 ### Changed
