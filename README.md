@@ -1,3 +1,21 @@
+> **This repository has moved.**
+>
+> `atb-cli` is now maintained at **[allthebacteria/atb-cli](https://github.com/allthebacteria/atb-cli)**.
+>
+> **New install URL:**
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
+> ```
+>
+> Already-installed binaries (`v0.12.3` or newer) auto-discover releases on the new repo via `atb update` — no action required.
+>
+> Historical releases `v0.1.0` – `v0.12.4` remain downloadable from this archived repository for reference.
+>
+> Original README follows below.
+
+---
+
 # atb-cli
 
 A command-line tool for querying the [AllTheBacteria](https://osf.io/xv7q9/) genomics database (~3.2M bacterial genomes), searching AMR/stress/virulence genes, finding closest genomes via sketch distances, and downloading genome assemblies.
